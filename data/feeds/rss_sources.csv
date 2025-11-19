@@ -1,0 +1,19 @@
+種別,サイト名,URL,取得方式,説明,制約,優先度,カテゴリ,言語
+公式,Google Search Central Blog,https://developers.google.com/search/blog/feeds/blog-posts.xml,RSS,Google 検索に関する公式アップデート・アルゴリズム変更情報。,Except as otherwise noted the content of this page is licensed under the Creative Commons Attribution 4.0 License,1,official,en
+公式,Google Developers Blog,https://developers.googleblog.com/feeds/posts/default,RSS,Google の開発者向け公式ブログ／検索・Web 技術関連投稿を含む。,記載なし（利用規約はGoogle全体の条項に準じ）,1,official,en
+公式,Google Search Central (Twitter/X),https://twitter.com/googlesearchc,Social,Google検索公式Twitterアカウントからのアップデート情報,公式ソーシャルメディア,1,official,en
+専門メディア,Search Engine Land,https://searchengineland.com/feed,RSS,SEO／検索マーケティングの主要メディア。最新トレンド・アルゴリズム速報も掲載。,記載なし,2,media,en
+専門メディア,Search Engine Journal,https://rss.searchenginejournal.com/,RSS,SEO・コンテンツ戦略・検索動向を幅広くカバーするメディア。,記載なし,2,media,en
+専門メディア,Search Engine Watch,https://www.searchenginewatch.com/feed/,RSS,検索業界で長く運営されている情報源。SEO・デジタルマーケ全般。,記載なし,2,media,en
+専門メディア,Search Engine Roundtable,http://feeds.seroundtable.com/SearchEngineRoundtable1,RSS,"フォーラム／専門家議論を拾ってくる形式。アルゴリズム変動の""気づき""に有効。",記載なし,2,media,en
+専門メディア,SE Ranking Blog,https://seranking.com/blog/feed/,RSS,SEOツール運営企業による実践的な技術SEO・競合分析トレンド。,記載なし,3,tool_vendor,en
+専門メディア,Rank Ranger Blog,http://www.rankranger.com/RSS/,RSS,SERP変動・アルゴリズム履歴に強い専門サイト。,記載なし,3,tool_vendor,en
+国内専門メディア,Web担当者Forum ? 正しいSEO相談室,https://webtan.impress.co.jp/feed/seo/,RSS,日本国内のSEO／Webマーケティング専門メディア「Web担当者Forum」内「正しいSEO相談室」コーナー。更新情報のフィードあり。,利用規約ありだが「個人利用のみ」等の明確な記載なし（会員投稿・利用に関する条項あり）,2,media,ja
+国内専門メディア,海外&国内SEO情報ウォッチ（鈴木謙一氏ブログ）,https://www.suzukikenichi.com/blog/feeds/posts/default,RSS,SEO研究者 鈴木謙一氏による「海外＆国内SEO情報ウォッチ」。RSS取得可能。,記載なし,2,expert,ja
+国内専門メディア,Keywordmap Academy,https://keywordmap.jp/academy/feed/,RSS,キーワード分析／コンテンツSEOツール運営者の知見を発信。初心者?中級者向け。,記載なし,3,tool_vendor,ja
+公式,Google Search Status Dashboard,https://status.search.google.com/feed,RSS,Google検索システムの稼働状況やインデックス障害などを通知する公式フィード。,記載なし（Google全体の利用規約に準拠）,1,official,en
+公式,Google Search Central Blog（推奨RSS版）,https://developers.google.com/search/blog/rss,RSS,Google検索・SEO・ドキュメント更新情報の公式ブログ。RSSが有効な場合あり。,制約なしまたはGoogle全体規約準拠,1,official,en
+専門メディア,Search Engine Land,https://www.searchengineland.com/feed,RSS,SEO／検索マーケティングの大手メディア。アルゴリズム速報と最新ニュース。,記載なし,2,media,en
+専門メディア,Search Engine Roundtable,https://www.seroundtable.com/index.xml,RSS,フォーラム・専門家議論をまとめる速報系メディア。アルゴリズム変動検知が早い。,記載なし,2,media,en
+専門メディア,Semrush Blog,https://www.semrush.com/blog/feed/,RSS,世界的SEOツールSemrushの公式ブログ。実験データ・検索分析・コンテンツ設計に強い。,記載なし,3,tool_vendor,en
+専門メディア,Ahrefs Blog,https://ahrefs.com/blog/feed/,RSS,世界的SEOツールAhrefsの公式ブログ。被リンク分析・検索データ研究が豊富。,記載なし,3,tool_vendor,en
