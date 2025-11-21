@@ -24,6 +24,14 @@ WARNING_ICON = ":material/warning:"
 ERROR_ICON = ":material/error:"
 SPINNER_TEXT = "回答生成中..."
 
+# Basic認証関連
+AUTH_LOGIN_TITLE = "### 🔐 ログイン"
+AUTH_USERNAME_LABEL = "ユーザー名"
+AUTH_PASSWORD_LABEL = "パスワード"
+AUTH_LOGIN_BUTTON = "ログイン"
+AUTH_ERROR_MESSAGE = "ユーザー名またはパスワードが正しくありません"
+AUTH_SUCCESS_MESSAGE = "✅ ログインしました"
+
 # モード切り替え関連
 MODE_SEO_QUESTION = "SEO質問モード"
 MODE_DOMAIN_ANALYSIS = "ドメインSEO解析モード"
