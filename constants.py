@@ -5,6 +5,7 @@
 ############################################################
 # ライブラリの読み込み
 ############################################################
+import os
 from langchain_community.document_loaders import PyMuPDFLoader, Docx2txtLoader, TextLoader
 from langchain_community.document_loaders.csv_loader import CSVLoader
 
@@ -35,7 +36,46 @@ AUTH_SUCCESS_MESSAGE = "✅ ログインしました"
 # モード切り替え関連
 MODE_SEO_QUESTION = "SEO質問モード"
 MODE_DOMAIN_ANALYSIS = "ドメインSEO解析モード"
+MODE_SUGGEST_KEYWORDS = "サジェストキーワード調査モード"
+MODE_PRACTICE_QUESTIONS = "SEO検定練習問題モード"
 DEFAULT_MODE = MODE_SEO_QUESTION
+
+# サジェストキーワードモード設定（Streamlit Cloud対策強化版）
+SUGGEST_KEYWORDS_CONFIG = {
+    "MAX_RETRIES": 3,           # 最大リトライ回数
+    "REQUEST_DELAY": 3.0,       # リクエスト間隔（秒）- Cloud環境対策で3秒に設定
+    "TIMEOUT": 10,              # タイムアウト（秒）
+    "MAX_KEYWORD_LENGTH": 100,  # 最大キーワード文字数
+    "USE_BING_FALLBACK": True,  # Bingフォールバック有効化
+    "USE_PROXY": False,         # プロキシ使用（オプション）※設定時は下記PROXY_URLを指定
+    "PROXY_URL": None,          # プロキシURL（例: "http://proxy.example.com:8080"）
+}
+
+# User-Agent（Streamlit Cloud対策・macOS Safari仕様）
+SUGGEST_USER_AGENT = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+
+# サジェストキーワードモードUI文言
+SUGGEST_MODE_TITLE = "🔍 サジェストキーワード調査"
+SUGGEST_MODE_DESCRIPTION = """
+このモードでは、2つのメインキーワードを入力することで、Googleからサジェストキーワードを取得できます。
+
+APIキー不要・無料で利用できます。（Google失敗時はBingから自動取得）
+
+**ご注意**:
+- 実行環境のIPアドレスや取得タイミングによって結果が異なる場合があります
+- Googleはリアルタイムの検索トレンドや地域的な検索傾向を反映するため、同じキーワードでも時間帯や場所で異なる結果が返されることがあります
+- 本ツールでは地域設定を「日本全体」に固定していますが、完全に統一された結果を保証するものではありません
+
+*※ 社内専用ツールとして利用してください。連続大量実行はお控えください。*
+"""
+SUGGEST_KEYWORD1_LABEL = "メインキーワード①"
+SUGGEST_KEYWORD1_PLACEHOLDER = "例: 東京"
+SUGGEST_KEYWORD2_LABEL = "メインキーワード②"
+SUGGEST_KEYWORD2_PLACEHOLDER = "例: 美容室"
+SUGGEST_SEARCH_BUTTON = "🔍 サジェストを取得"
+SUGGEST_SEARCHING_MESSAGE = "サジェストキーワードを取得中..."
+SUGGEST_SUCCESS_MESSAGE = "✅ サジェストキーワードを取得しました"
+SUGGEST_ERROR_MESSAGE = "❌ サジェストキーワードを取得できませんでした（Google / Bing 側で一時的なアクセス制限がかかっている可能性があります）"
 
 # ドメイン解析モード設定
 DOMAIN_ANALYSIS_CONFIG = {
@@ -45,6 +85,67 @@ DOMAIN_ANALYSIS_CONFIG = {
     "RESPECT_ROBOTS_TXT": True,  # robots.txt遵守
     "USER_AGENT": "SEO-Analysis-Bot/1.0 (Internal Tool)",  # User-Agent
 }
+
+# 練習問題モード設定
+PRACTICE_QUESTIONS_CONFIG = {
+    # コスト制御
+    "MAX_QUESTIONS_PER_SESSION": 20,  # 1セッションあたり上限
+    
+    # 級別出題範囲（ファイル名パターン）
+    # Phase 2A改善：級別を完全分離（類似度検索の精度向上）
+    "GRADE_RANGES": {
+        "1級": ["SEO1-"],  # 1級のみ + 共通資料
+        "2級": ["SEO2-"],  # 2級のみ + 共通資料
+        "3級": ["SEO3-"]   # 3級のみ + 共通資料
+    },
+    
+    # 問題生成設定（改善版）
+    "NUM_REFERENCE_DOCS": 5,  # 参考資料数（3→5に増加、多様性向上）
+    "REFERENCE_DOC_CHAR_LENGTH": 1000,  # 各参考資料の文字数（800→1000に増加）
+    "QUESTION_GENERATION_TEMPERATURE": 0.7,  # 問題生成時の多様性
+    
+    # JSON検証設定
+    "MAX_RETRY_ON_JSON_ERROR": 2,  # JSON解析失敗時のリトライ回数
+    
+    # Phase 3-1改善版: 公式問題集PDF設定（全ファイル対応）
+    "OFFICIAL_PDF_DIR": "./data/practice",  # 公式問題集ディレクトリ
+    # 級別の公式問題集ファイルパターン（ファイル名の一部で判定）
+    "OFFICIAL_PDF_PATTERNS": {
+        "1級": ["SEO1-"],  
+        "2級": ["SEO2-"],  
+        "3級": ["SEO3-"]  
+    },
+    "NUM_SAMPLE_PROBLEMS": 3,  # プロンプトに含める公式問題のサンプル数（2→3に増加）
+    "SAMPLE_PAGE_RANGE": (0, 50),  # サンプル抽出ページ範囲（全ページ対象に拡大）
+    "SAMPLE_CHAR_LENGTH": 600,  # 各サンプルの文字数（500→600に増加）
+    
+    # Phase 3-2: 問題履歴管理設定
+    "MAX_DUPLICATE_RETRY": 5,  # 重複検出時の再生成試行回数
+    "ENABLE_DUPLICATE_CHECK": True,  # 重複チェックの有効/無効
+}
+
+# 練習問題モードUI文言
+PRACTICE_MODE_TITLE = "📝 SEO検定練習問題"
+PRACTICE_MODE_DESCRIPTION = """
+このモードでは、SEO検定公式テキストと公式問題集を参考に、AIが練習問題を生成します。
+
+**特徴**:
+- 4択形式の単一解答問題
+- 級ごとの出題範囲に対応
+
+**注意事項**:
+- 生成される問題は公式問題集を参考にしたAI生成問題です
+- 本番の検定試験とは異なる場合があります
+- 学習の参考としてご活用ください
+
+*※ 社内専用ツールとして利用してください。*
+"""
+PRACTICE_GRADE_LABEL = "受験級を選択"
+PRACTICE_GENERATE_BUTTON = "🎲 問題を生成"
+PRACTICE_ANSWER_BUTTON = "✅ 解答を表示"
+PRACTICE_NEXT_BUTTON = "➡️ 次の問題を生成"
+PRACTICE_GENERATING_MESSAGE = "問題を生成中..."
+PRACTICE_MAX_QUESTIONS_WARNING = "本セッションの問題生成上限に達しました。ページを更新してください。"
 
 
 # ==========================================
@@ -67,7 +168,7 @@ TEMPERATURE = 0.5
 # ==========================================
 # トークン制限対応設定
 MAX_TOKENS_PER_REQUEST = 250000  # OpenAI制限の余裕を持った設定
-DEFAULT_CHUNK_SIZE = 500         # 標準チャンクサイズ
+DEFAULT_CHUNK_SIZE = 1200        # 標準チャンクサイズ（Phase 2B: 500→1200、コンテキスト強化）
 LARGE_DATA_CHUNK_SIZE = 300      # 大量データ用チャンクサイズ
 EMBEDDING_BATCH_SIZE = 50        # エンベディング処理バッチサイズ
 MAX_CHARS_BEFORE_SPLITTING = 800000  # この文字数を超えたら小さなチャンクを使用
@@ -76,16 +177,24 @@ MAX_CHARS_BEFORE_SPLITTING = 800000  # この文字数を超えたら小さな�
 PERSISTENT_DB_PATH = "./vector_db/seo_knowledge"  # 基礎知識用永続化DB（本番デプロイ用パス）
 TEMP_DB_PATH = "./vector_db/temp_cache"           # 一時情報用DB（将来拡張用）
 DB_VERSION_FILE = "./vector_db/db_version.txt"   # DBバージョン管理ファイル
-CURRENT_DB_VERSION = "2.0"                       # 現在のDBバージョン（RecursiveCharacterTextSplitter, chunk_size=2000, overlap=400）
+CURRENT_DB_VERSION = "3.0"                       # Phase 2B: DBバージョン更新（chunk_size=1200, overlap=200）
 
 # ハイブリッドRAGシステム設定（3層構造対応）
 HYBRID_RAG_CONFIG = {
+    # ============================================
+    # 【重要】RSS/外部API完全停止設定
+    # ============================================
+    # 方針: 2024年9月以降の最新情報は取得しない
+    # 情報源: SEO検定公式テキスト(2024年8月時点)のみ
+    # 理由: 情報範囲の明確化、境界線の曖昧さ排除、ユーザー誤解防止
+    "RSS_ENABLED": False,  # RSS/外部API機能の完全無効化
+    
     # 短期キャッシュDB設定
     "CACHE_DB_PATH": "./vector_db/latest_cache",
     "CACHE_EXPIRY_HOURS": 24,
     "MAX_CACHED_ARTICLES": 100,
     
-    # RSS/Atomフィード設定（CSVファイルから動的読み込み）
+    # RSS/Atomフィード設定（CSVファイルから動的読み込み）※現在無効
     "RSS_CONFIG_FILE": "./data/feeds/rss_sources.csv",
     "MAX_FEEDS_PER_PRIORITY": {
         1: 5,   # 公式サイト：最大5件
@@ -161,7 +270,6 @@ SEO_CATEGORY_SYSTEM = {
         "search_features": ["AI", "SGE", "音声検索", "画像検索", "新機能"]
     }
 }
-
 
 # ==========================================
 # RAG参照用のデータソース系
@@ -248,6 +356,11 @@ SYSTEM_PROMPT_DOC_SEARCH = """
 SYSTEM_PROMPT_SEO = """
     あなたは社内SEO専門のアシスタントです。
     以下のSEO関連資料を主要な参考にして、高品質で詳細な回答をしてください。
+
+    【重要】情報範囲について
+    - 本システムが保有する情報は「SEO検定公式テキスト(2025・2026年版：2024年8月時点の情報)」のみです
+    - 2024年9月以降の情報や最新のSEOトレンドについては扱いません
+    - 資料に記載のない内容については推測せず、「資料に記載がない」旨を明示してください
 
     【高精度回答条件】
     1. 提供されたSEO関連コンテキスト情報を最優先に使用してください
