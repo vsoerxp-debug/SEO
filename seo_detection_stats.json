@@ -1,0 +1,611 @@
+{
+  "total_queries": 105,
+  "seo_related_count": 98,
+  "detection_methods": {
+    "keyword": 98,
+    "dynamic": 0,
+    "context": 0
+  },
+  "recent_queries": [
+    {
+      "query": "モバイルSEOの最適化方法を教えて",
+      "is_seo": true,
+      "method": "keyword",
+      "timestamp": "2025-12-01T09:34:11.130949"
+    },
+    {
+      "query": "ローカルSEOで重要なポイントは？",
+      "is_seo": true,
+      "method": "keyword",
+      "timestamp": "2025-12-01T09:36:21.749433"
+    },
+    {
+      "query": "モバイルSEOの最適化方法を教えて",
+      "is_seo": true,
+      "method": "keyword",
+      "timestamp": "2025-12-01T10:00:25.116567"
+    },
+    {
+      "query": "ローカルSEOで重要なポイントは？",
+      "is_seo": true,
+      "method": "keyword",
+      "timestamp": "2025-12-01T10:01:18.230913"
+    },
+    {
+      "query": "Googleアップデートの対策方法を教えて",
+      "is_seo": true,
+      "method": "keyword",
+      "timestamp": "2025-12-01T10:02:14.432722"
+    },
+    {
+      "query": "2025年のグーグルアップデート情報を教えて",
+      "is_seo": true,
+      "method": "keyword",
+      "timestamp": "2025-12-01T10:04:09.168168"
+    },
+    {
+      "query": "社内資料は何を参考にしている？",
+      "is_seo": false,
+      "method": "none",
+      "timestamp": "2025-12-01T10:06:54.345423"
+    },
+    {
+      "query": "SEOの社内資料は何を参考にしている？",
+      "is_seo": true,
+      "method": "keyword",
+      "timestamp": "2025-12-01T10:07:04.775301"
+    },
+    {
+      "query": "Googleアルゴリズムの最新動向を教えて",
+      "is_seo": true,
+      "method": "keyword",
+      "timestamp": "2025-12-01T10:07:58.949716"
+    },
+    {
+      "query": "キーワード選定のコツを教えて",
+      "is_seo": true,
+      "method": "keyword",
+      "timestamp": "2025-12-01T10:09:06.941909"
+    },
+    {
+      "query": "ページ速度の改善方法を教えて",
+      "is_seo": true,
+      "method": "keyword",
+      "timestamp": "2025-12-01T10:10:01.920667"
+    },
+    {
+      "query": "ページの推奨文字数は？",
+      "is_seo": true,
+      "method": "keyword",
+      "timestamp": "2025-12-01T10:13:35.637270"
+    },
+    {
+      "query": "サイテーションとは？",
+      "is_seo": true,
+      "method": "keyword",
+      "timestamp": "2025-12-01T10:14:26.210146"
+    },
+    {
+      "query": "サーチコンソールで見るべきポイントは？",
+      "is_seo": true,
+      "method": "keyword",
+      "timestamp": "2025-12-01T10:30:32.846865"
+    },
+    {
+      "query": "モバイルSEOの最適化方法を教えて",
+      "is_seo": true,
+      "method": "keyword",
+      "timestamp": "2025-12-01T10:39:34.269904"
+    },
+    {
+      "query": "サブページの推奨文字量は？",
+      "is_seo": true,
+      "method": "keyword",
+      "timestamp": "2025-12-01T10:40:15.009230"
+    },
+    {
+      "query": "サイテーションとは？",
+      "is_seo": true,
+      "method": "keyword",
+      "timestamp": "2025-12-01T10:41:02.794744"
+    },
+    {
+      "query": "GA4とは？",
+      "is_seo": false,
+      "method": "none",
+      "timestamp": "2025-12-01T11:09:38.404630"
+    },
+    {
+      "query": "メタタグの最適化とは？",
+      "is_seo": true,
+      "method": "keyword",
+      "timestamp": "2025-12-01T11:09:49.900752"
+    },
+    {
+      "query": "ディスクリプションは何に使われるの？",
+      "is_seo": false,
+      "method": "none",
+      "timestamp": "2025-12-01T11:11:34.667885"
+    },
+    {
+      "query": "メタディスクリプションは何に使われるの？",
+      "is_seo": false,
+      "method": "none",
+      "timestamp": "2025-12-01T11:11:42.812784"
+    },
+    {
+      "query": "メタディスクリプションとは？",
+      "is_seo": false,
+      "method": "none",
+      "timestamp": "2025-12-01T11:12:08.759356"
+    },
+    {
+      "query": "タイトルタグは何文字にすればよい？",
+      "is_seo": true,
+      "method": "keyword",
+      "timestamp": "2025-12-01T11:12:20.916155"
+    },
+    {
+      "query": "サイテーションとは？",
+      "is_seo": true,
+      "method": "keyword",
+      "timestamp": "2025-12-01T11:14:02.718425"
+    },
+    {
+      "query": "2025年に行われたグーグルアップデート情報を教えて",
+      "is_seo": true,
+      "method": "keyword",
+      "timestamp": "2025-12-01T11:14:50.299536"
+    },
+    {
+      "query": "MEO対策を教えて",
+      "is_seo": true,
+      "method": "keyword",
+      "timestamp": "2025-12-01T11:16:37.056541"
+    },
+    {
+      "query": "インスタと同じ内容をブログで書いてもいい＞",
+      "is_seo": false,
+      "method": "none",
+      "timestamp": "2025-12-01T11:35:20.615972"
+    },
+    {
+      "query": "有効なMEO対策を教えて",
+      "is_seo": true,
+      "method": "keyword",
+      "timestamp": "2025-12-01T11:35:41.636232"
+    },
+    {
+      "query": "検索エンジンが評価する主要なランキング要因にはどんなものがありますか？",
+      "is_seo": true,
+      "method": "keyword",
+      "timestamp": "2025-12-01T11:37:51.816308"
+    },
+    {
+      "query": "キーワードリサーチを行う際に最も重要なポイントは何ですか？",
+      "is_seo": true,
+      "method": "keyword",
+      "timestamp": "2025-12-01T11:38:43.181671"
+    },
+    {
+      "query": "コンテンツSEOを強化するために必要な記事構成やライティングのコツは？",
+      "is_seo": true,
+      "method": "keyword",
+      "timestamp": "2025-12-01T11:39:30.099759"
+    },
+    {
+      "query": "内部リンクの最適な張り方や、サイト構造を改善する方法はありますか？",
+      "is_seo": true,
+      "method": "keyword",
+      "timestamp": "2025-12-01T11:40:34.467485"
+    },
+    {
+      "query": "検索意図を適切に把握し、コンテンツに反映するための方法は？",
+      "is_seo": true,
+      "method": "keyword",
+      "timestamp": "2025-12-01T11:41:32.698731"
+    },
+    {
+      "query": "Googleのアルゴリズムアップデートに対応するため、普段から行うべき対策は何ですか？",
+      "is_seo": true,
+      "method": "keyword",
+      "timestamp": "2025-12-01T11:46:40.186463"
+    },
+    {
+      "query": "SEOに強いタイトルタグ・メタディスクリプションを書くポイントは？",
+      "is_seo": true,
+      "method": "keyword",
+      "timestamp": "2025-12-01T11:49:10.797205"
+    },
+    {
+      "query": "モバイルフレンドリーであるかどうかは検索順位にどの程度影響しますか？",
+      "is_seo": true,
+      "method": "keyword",
+      "timestamp": "2025-12-01T12:17:40.401447"
+    },
+    {
+      "query": "2025年に行われたグーグルアップデート情報を教えて",
+      "is_seo": true,
+      "method": "keyword",
+      "timestamp": "2025-12-01T12:18:58.895288"
+    },
+    {
+      "query": "2025年に行われたグーグルアップデート情報を教えて",
+      "is_seo": true,
+      "method": "keyword",
+      "timestamp": "2025-12-01T12:32:03.513806"
+    },
+    {
+      "query": "2025年に行われたグーグルアップデート情報を教えて",
+      "is_seo": true,
+      "method": "keyword",
+      "timestamp": "2025-12-01T14:00:47.960253"
+    },
+    {
+      "query": "メタディスクリプションの最適化方法",
+      "is_seo": true,
+      "method": "keyword",
+      "timestamp": "2025-12-01T14:03:25.411345"
+    },
+    {
+      "query": "2025年に行われたグーグルアップデート情報を教えて",
+      "is_seo": true,
+      "method": "keyword",
+      "timestamp": "2025-12-01T14:10:44.015634"
+    },
+    {
+      "query": "2025年に行われたグーグルアップデート情報を教えて",
+      "is_seo": true,
+      "method": "keyword",
+      "timestamp": "2025-12-01T14:19:02.039098"
+    },
+    {
+      "query": "2025年に行われたグーグルアップデート情報を教えて",
+      "is_seo": true,
+      "method": "keyword",
+      "timestamp": "2025-12-01T14:31:57.921060"
+    },
+    {
+      "query": "メタディスクリプションの最適化方法を教えて",
+      "is_seo": true,
+      "method": "keyword",
+      "timestamp": "2025-12-01T14:33:04.018827"
+    },
+    {
+      "query": "2025年に行われたグーグルアップデート情報を教えて",
+      "is_seo": true,
+      "method": "keyword",
+      "timestamp": "2025-12-01T15:25:38.803710"
+    },
+    {
+      "query": "メタディスクリプションの最適化方法を教えて",
+      "is_seo": true,
+      "method": "keyword",
+      "timestamp": "2025-12-01T15:26:52.272468"
+    },
+    {
+      "query": "AI overviewとは？",
+      "is_seo": true,
+      "method": "keyword",
+      "timestamp": "2025-12-01T15:28:06.346307"
+    },
+    {
+      "query": "2025年に行われたグーグルアップデート情報を教え",
+      "is_seo": true,
+      "method": "keyword",
+      "timestamp": "2025-12-01T15:43:43.215830"
+    },
+    {
+      "query": "2025年に行われたグーグルアップデート情報を教えて",
+      "is_seo": true,
+      "method": "keyword",
+      "timestamp": "2025-12-01T16:07:51.233657"
+    },
+    {
+      "query": "2025年に行われたグーグルアップデート情報を教えて",
+      "is_seo": true,
+      "method": "keyword",
+      "timestamp": "2025-12-01T16:39:01.271494"
+    },
+    {
+      "query": "2025年に行われたグーグルアップデート情報を教えて",
+      "is_seo": true,
+      "method": "keyword",
+      "timestamp": "2025-12-01T17:02:16.392272"
+    },
+    {
+      "query": "2025年に行われたグーグルアップデート情報を教えて",
+      "is_seo": true,
+      "method": "keyword",
+      "timestamp": "2025-12-01T17:15:09.014373"
+    },
+    {
+      "query": "2025年に行われたグーグルアップデート情報を教えて",
+      "is_seo": true,
+      "method": "keyword",
+      "timestamp": "2025-12-01T17:31:21.393630"
+    },
+    {
+      "query": "2025年に行われたグーグルアップデート情報を教えて",
+      "is_seo": true,
+      "method": "keyword",
+      "timestamp": "2025-12-01T17:48:27.976386"
+    },
+    {
+      "query": "SEOの基本について教えて",
+      "is_seo": true,
+      "method": "keyword",
+      "timestamp": "2025-12-02T09:45:23.672217"
+    },
+    {
+      "query": "2025年に行われたGoogleアップデート情報を教えて",
+      "is_seo": true,
+      "method": "keyword",
+      "timestamp": "2025-12-02T09:46:35.488511"
+    },
+    {
+      "query": "SEOの基本について教えて",
+      "is_seo": true,
+      "method": "keyword",
+      "timestamp": "2025-12-02T10:36:00.361616"
+    },
+    {
+      "query": "2025年に行われたGoogleアップデート情報を教えて",
+      "is_seo": true,
+      "method": "keyword",
+      "timestamp": "2025-12-02T10:36:44.068219"
+    },
+    {
+      "query": "2025年のGoogleアップデート情報を教えて",
+      "is_seo": true,
+      "method": "keyword",
+      "timestamp": "2025-12-02T11:09:38.087637"
+    },
+    {
+      "query": "2025年に最適なSEO基本について教えて",
+      "is_seo": true,
+      "method": "keyword",
+      "timestamp": "2025-12-02T11:12:05.952125"
+    },
+    {
+      "query": "生成AIとSEOについて教えて",
+      "is_seo": true,
+      "method": "keyword",
+      "timestamp": "2025-12-02T11:14:35.770687"
+    },
+    {
+      "query": "2025年のGoogleアップデート情報を教えて",
+      "is_seo": true,
+      "method": "keyword",
+      "timestamp": "2025-12-02T11:22:30.082083"
+    },
+    {
+      "query": "2025年に最適なSEO基本について教えて",
+      "is_seo": true,
+      "method": "keyword",
+      "timestamp": "2025-12-02T11:23:11.446339"
+    },
+    {
+      "query": "生成AIとSEOについて教えて",
+      "is_seo": true,
+      "method": "keyword",
+      "timestamp": "2025-12-02T11:23:52.455924"
+    },
+    {
+      "query": "2025年のGoogleアップデート情報を教えて",
+      "is_seo": true,
+      "method": "keyword",
+      "timestamp": "2025-12-02T11:31:02.942938"
+    },
+    {
+      "query": "2024年のコアアップデート情報を教えて",
+      "is_seo": true,
+      "method": "keyword",
+      "timestamp": "2025-12-02T11:31:50.270029"
+    },
+    {
+      "query": "2025年に行われたグーグルアップデート情報を教えて",
+      "is_seo": true,
+      "method": "keyword",
+      "timestamp": "2025-12-02T12:10:06.249556"
+    },
+    {
+      "query": "AIモードやAIOverViewが実装されている現在、SEO的にはどのような取り組みをしたらいい？",
+      "is_seo": true,
+      "method": "keyword",
+      "timestamp": "2025-12-02T12:12:45.821678"
+    },
+    {
+      "query": "2025年のGoogleアップデート情報を教えて",
+      "is_seo": true,
+      "method": "keyword",
+      "timestamp": "2025-12-02T12:39:02.519587"
+    },
+    {
+      "query": "2025年中に行われたGoogleアップデート情報を全て教えて",
+      "is_seo": true,
+      "method": "keyword",
+      "timestamp": "2025-12-02T12:40:30.729190"
+    },
+    {
+      "query": "Search Consoleの新機能について教えて",
+      "is_seo": true,
+      "method": "keyword",
+      "timestamp": "2025-12-02T12:41:24.473269"
+    },
+    {
+      "query": "AI OverviewsとSEO対策について教えて",
+      "is_seo": true,
+      "method": "keyword",
+      "timestamp": "2025-12-02T12:42:18.850245"
+    },
+    {
+      "query": "ページの推奨文字数は？",
+      "is_seo": true,
+      "method": "keyword",
+      "timestamp": "2025-12-02T12:59:48.847062"
+    },
+    {
+      "query": "2025年のGoogleアップデート情報を教えて",
+      "is_seo": true,
+      "method": "keyword",
+      "timestamp": "2025-12-02T16:57:20.653342"
+    },
+    {
+      "query": "2025年のGoogleアップデート情報を教えて",
+      "is_seo": true,
+      "method": "keyword",
+      "timestamp": "2025-12-02T17:02:06.550671"
+    },
+    {
+      "query": "2025年のGoogleアップデート情報を教えて",
+      "is_seo": true,
+      "method": "keyword",
+      "timestamp": "2025-12-02T17:10:07.815065"
+    },
+    {
+      "query": "2025年のGoogleアップデート情報を教えて",
+      "is_seo": true,
+      "method": "keyword",
+      "timestamp": "2025-12-02T17:14:25.998263"
+    },
+    {
+      "query": "2025年のGoogleアップデート情報を教えて",
+      "is_seo": true,
+      "method": "keyword",
+      "timestamp": "2025-12-02T17:26:20.562521"
+    },
+    {
+      "query": "モバイルSEOの最適化方法を教えて",
+      "is_seo": true,
+      "method": "keyword",
+      "timestamp": "2025-12-02T17:29:47.657362"
+    },
+    {
+      "query": "2025年のGoogleアップデート情報を教えて",
+      "is_seo": true,
+      "method": "keyword",
+      "timestamp": "2025-12-02T17:38:57.491081"
+    },
+    {
+      "query": "2025年のGoogleアップデート情報を教えて",
+      "is_seo": true,
+      "method": "keyword",
+      "timestamp": "2025-12-02T17:47:34.671082"
+    },
+    {
+      "query": "2025年のGoogleアップデート情報を教えて",
+      "is_seo": true,
+      "method": "keyword",
+      "timestamp": "2025-12-02T17:53:01.570732"
+    },
+    {
+      "query": "タイトルタグの推奨文字数は＞",
+      "is_seo": true,
+      "method": "keyword",
+      "timestamp": "2025-12-02T17:58:17.621455"
+    },
+    {
+      "query": "2025年中に行われたグーグルアップデート情報を教えて",
+      "is_seo": true,
+      "method": "keyword",
+      "timestamp": "2025-12-03T08:00:04.476528"
+    },
+    {
+      "query": "2025年8月26日に行われたスパムアップデート以外に2025年中のアップデートはない？",
+      "is_seo": true,
+      "method": "keyword",
+      "timestamp": "2025-12-03T08:02:30.555969"
+    },
+    {
+      "query": "2025年に行われたグーグルアップデート情報を教えて",
+      "is_seo": true,
+      "method": "keyword",
+      "timestamp": "2025-12-03T11:05:34.292237"
+    },
+    {
+      "query": "サブページの推奨文字数は？",
+      "is_seo": true,
+      "method": "keyword",
+      "timestamp": "2025-12-03T11:49:01.666096"
+    },
+    {
+      "query": "モバイルSEOの最適化方法を教えて",
+      "is_seo": true,
+      "method": "keyword",
+      "timestamp": "2025-12-03T11:56:59.265590"
+    },
+    {
+      "query": "ページの推奨文字数を教えて",
+      "is_seo": true,
+      "method": "keyword",
+      "timestamp": "2025-12-03T12:56:25.086064"
+    },
+    {
+      "query": "ページの推奨文字数は？",
+      "is_seo": true,
+      "method": "keyword",
+      "timestamp": "2025-12-03T13:01:19.156532"
+    },
+    {
+      "query": "コンテンツのテーマに関して、SEO内部要素で最も重要なポイントは何ですか？",
+      "is_seo": true,
+      "method": "keyword",
+      "timestamp": "2025-12-03T13:03:42.028974"
+    },
+    {
+      "query": "Googleがコンテンツの信頼性に関して持つ基準であるE-E-A-Tとは、どのような4つの要素で構成",
+      "is_seo": true,
+      "method": "keyword",
+      "timestamp": "2025-12-03T13:04:08.000291"
+    },
+    {
+      "query": "Googleはコンテンツの人気度をどのように測定していると考えられていますか？",
+      "is_seo": true,
+      "method": "keyword",
+      "timestamp": "2025-12-03T13:04:40.536987"
+    },
+    {
+      "query": "トラフィック（サイトへの交通量）を増やすための9つのステップとは何ですか？",
+      "is_seo": true,
+      "method": "keyword",
+      "timestamp": "2025-12-03T13:05:03.400148"
+    },
+    {
+      "query": "SEO技術の3大要素とは何ですか？",
+      "is_seo": true,
+      "method": "keyword",
+      "timestamp": "2025-12-03T13:05:35.325351"
+    },
+    {
+      "query": "目標キーワードの設定において、上位表示の難易度による3段階のランク付けは何ですか？",
+      "is_seo": true,
+      "method": "keyword",
+      "timestamp": "2025-12-03T13:06:01.527067"
+    },
+    {
+      "query": "検索意図とは何ですか？",
+      "is_seo": true,
+      "method": "keyword",
+      "timestamp": "2025-12-03T13:06:39.465820"
+    },
+    {
+      "query": "モバイルSEOの最適化方法を教えて",
+      "is_seo": true,
+      "method": "keyword",
+      "timestamp": "2025-12-03T15:33:52.438923"
+    },
+    {
+      "query": "サブページの推奨文字量は？",
+      "is_seo": true,
+      "method": "keyword",
+      "timestamp": "2025-12-03T15:51:56.654478"
+    },
+    {
+      "query": "メタディスクリプションとは？",
+      "is_seo": true,
+      "method": "keyword",
+      "timestamp": "2025-12-03T15:52:18.762790"
+    }
+  ]
+}
