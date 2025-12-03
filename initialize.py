@@ -321,6 +321,10 @@ def initialize_logger():
 
     # 定義したフォーマッターの適用
     log_handler.setFormatter(formatter)
+    
+    # コンソール出力用のハンドラーを追加（デバッグ用）
+    console_handler = logging.StreamHandler()
+    console_handler.setFormatter(formatter)
 
     # ログレベルを「INFO」に設定
     logger.setLevel(logging.INFO)
@@ -328,6 +332,7 @@ def initialize_logger():
     # 作成したハンドラー（ログ出力先を制御するオブジェクト）を、
     # ロガー（ログメッセージを実際に生成するオブジェクト）に追加してログ出力の最終設定
     logger.addHandler(log_handler)
+    logger.addHandler(console_handler)  # コンソールにも出力
 
 
 def initialize_session_id():
@@ -621,6 +626,30 @@ def initialize_retriever():
         chunk_chars = sum(len(doc.page_content) for doc in splitted_docs)
         chunk_tokens = chunk_chars // 4
         logger.info(f"分割結果: {len(splitted_docs)}チャンク, 推定トークン数: {chunk_tokens:,}")
+        
+        # 【Phase 2B】デバッグログ: ファイルパターン別チャンク数集計
+        pattern_chunk_counts = {}
+        for doc in splitted_docs:
+            source = doc.metadata.get('source', '')
+            # パターン判定（SEO1-, SEO2-, SEO3-, SEO4-）
+            for pattern in ['SEO1-', 'SEO2-', 'SEO3-', 'SEO4-']:
+                if pattern in source:
+                    pattern_chunk_counts[pattern] = pattern_chunk_counts.get(pattern, 0) + 1
+                    break
+        logger.info(f"[Phase 2B] パターン別チャンク数: {pattern_chunk_counts}")
+        
+        # 【Phase 2B】デバッグログ: パターン別チャンク文字数統計（avg/max/min/count）
+        sample_chunks = {}
+        for pattern in ['SEO1-', 'SEO2-', 'SEO3-', 'SEO4-']:
+            lengths = [len(doc.page_content) for doc in splitted_docs if pattern in doc.metadata.get('source', '')]
+            if lengths:
+                sample_chunks[pattern] = {
+                    'avg': int(sum(lengths) / len(lengths)),
+                    'max': max(lengths),
+                    'min': min(lengths),
+                    'count': len(lengths)
+                }
+        logger.info(f"[Phase 2B] パターン別チャンク文字数統計: {sample_chunks}")
 
         # 永続化ベクターストア作成
         db = create_persistent_vector_store_safely(
@@ -663,11 +692,11 @@ def initialize_retriever():
                 else:
                     # フォールバック：空のリストで初期化
                     texts = ["デフォルトSEO文書"]
-                    metadatas = [{"source": "default"}]
+                    metadatas = [{"source": "default", "is_fallback": True, "priority_weight": 0.3}]
             except Exception as get_docs_error:
                 logger.warning(f"DB文書取得エラー、デフォルト文書で初期化: {get_docs_error}")
                 texts = ["デフォルトSEO文書"]
-                metadatas = [{"source": "default"}]
+                metadatas = [{"source": "default", "is_fallback": True, "priority_weight": 0.3}]
             
             bm25_retriever = BM25Retriever.from_texts(
                 texts, 
@@ -763,6 +792,19 @@ def initialize_retriever():
                 st.session_state.enhanced_mode = True
                 st.session_state._enhanced_type = "vector_enhanced"
                 logger.info("標準ベクター検索システム初期化完了（基本高精度モード）")
+        
+        # 【Step 3】練習問題専用retriever（k=50で多様性向上）
+        try:
+            retriever_practice = db.as_retriever(
+                search_type="similarity",
+                search_kwargs={"k": 50}  # 練習問題用にk増加
+            )
+            st.session_state.retriever_practice = retriever_practice
+            logger.info("[Step 3] 練習問題専用Retriever初期化完了: k=50（多様性向上モード）")
+        except Exception as practice_error:
+            # 練習問題専用retrieverの初期化失敗時は既存retrieverを使用
+            st.session_state.retriever_practice = st.session_state.retriever
+            logger.warning(f"[Step 3] 練習問題専用Retriever初期化失敗、既存retriever使用: {practice_error}")
             
     except Exception as e:
         # 最終フォールバック：標準モード（高品質設定を維持）
@@ -773,6 +815,17 @@ def initialize_retriever():
         )
         st.session_state.enhanced_mode = True  # 高品質モードを維持
         st.session_state._enhanced_type = "standard"
+        
+        # 練習問題専用retrieverもフォールバック設定
+        try:
+            st.session_state.retriever_practice = db.as_retriever(
+                search_type="similarity",
+                search_kwargs={"k": 50}
+            )
+            logger.info("[Step 3] 練習問題専用Retriever（フォールバック）初期化完了: k=50")
+        except Exception:
+            st.session_state.retriever_practice = st.session_state.retriever
+            logger.warning("[Step 3] 練習問題専用Retriever（フォールバック）初期化失敗、既存retriever使用")
 
 
 def initialize_session_state():
@@ -838,7 +891,7 @@ def recursive_file_check(path, docs_all):
 
 def file_load(path, docs_all):
     """
-    ファイル内のデータ読み込み
+    ファイル内のデータ読み込み（title自動補完対応）
 
     Args:
         path: ファイルパス
@@ -848,6 +901,8 @@ def file_load(path, docs_all):
     file_extension = os.path.splitext(path)[1]
     # ファイル名（拡張子を含む）を取得
     file_name = os.path.basename(path)
+    # ファイル名（拡張子なし）を取得 - title用
+    file_name_without_ext = os.path.splitext(file_name)[0]
 
     # 想定していたファイル形式の場合のみ読み込む
     if file_extension in ct.SUPPORTED_EXTENSIONS:
@@ -860,10 +915,21 @@ def file_load(path, docs_all):
                 # 関数の場合：直接呼び出して結果を取得
                 docs = loader_func(path)
                 if isinstance(docs, list):
+                    # ★★★ title自動補完処理 ★★★
+                    for doc in docs:
+                        if hasattr(doc, 'metadata'):
+                            # titleが空文字またはNoneの場合、ファイル名から補完
+                            if not doc.metadata.get('title') or doc.metadata.get('title').strip() == '':
+                                doc.metadata['title'] = file_name_without_ext
                     docs_all.extend(docs)
                 else:
                     # ローダーオブジェクトの場合
                     docs = docs.load()
+                    # ★★★ title自動補完処理 ★★★
+                    for doc in docs:
+                        if hasattr(doc, 'metadata'):
+                            if not doc.metadata.get('title') or doc.metadata.get('title').strip() == '':
+                                doc.metadata['title'] = file_name_without_ext
                     docs_all.extend(docs)
             except Exception as e:
                 # エラー時はスキップ
@@ -872,6 +938,11 @@ def file_load(path, docs_all):
             # 従来の方式
             loader = loader_func(path)
             docs = loader.load()
+            # ★★★ title自動補完処理 ★★★
+            for doc in docs:
+                if hasattr(doc, 'metadata'):
+                    if not doc.metadata.get('title') or doc.metadata.get('title').strip() == '':
+                        doc.metadata['title'] = file_name_without_ext
             docs_all.extend(docs)
 
 
