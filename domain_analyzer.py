@@ -287,10 +287,10 @@ def _extract_seo_elements(soup: BeautifulSoup, url: str):
     meta_desc = soup.find("meta", attrs={"name": "description"})
     description = meta_desc.get("content", "").strip() if meta_desc and meta_desc.get("content") else "(meta descriptionなし)"
     
-    # メタキーワード（整合性チェック用）
+    # メタキーワード（制作者の意図したキーワードを取得）
     meta_keywords_tag = soup.find("meta", attrs={"name": "keywords"})
     meta_keywords = meta_keywords_tag.get("content", "").strip() if meta_keywords_tag and meta_keywords_tag.get("content") else ""
-    meta_keywords_list = [k.strip() for k in meta_keywords.split(",")] if meta_keywords else []
+    meta_keywords_list = [k.strip() for k in meta_keywords.split(",") if k.strip()] if meta_keywords else []
     
     # 見出し（H1-H3）- 検出数を増やして構造分析精度向上
     headings = {
@@ -1756,7 +1756,7 @@ def analyze_single_page_with_context(top_url: str, target_url: str, max_pages: i
 
 ## 改善提案項目
 
-1. **タイトルタグ** - 推奨30文字以内（モバイル表示で見切れないように）。キーワード配置、サイト全体との整合性
+1. **タイトルタグ** - 推奨30文字以内（モバイル表示で見切れないように）。トップページのキーワード（サイト全体のテーマ）との整合性を確認
 2. **メタディスクリプションタグ** - 推奨80文字程度（モバイルでは約80文字まで表示）。魅力的な説明文、CTR向上
 3. **H1タグ** - 推奨25～30文字以内（モバイルでの可読性を考慮）。タイトルとの整合性、キーワード使用、わかりやすさ
 4. **内部リンク戦略** - リンク数、アンカーテキスト多様度、関連性（アンカーテキストとページtitle・H1との類似度で評価）
@@ -1766,9 +1766,8 @@ def analyze_single_page_with_context(top_url: str, target_url: str, max_pages: i
    【サブページの場合】単純な概念: 1,500字程度、複雑な事柄: 4,000字以上
    【YMYL分野の場合】上記それぞれの文字数の2倍が推奨
    ※解析するページがメインページかサブページかは判断せず、すべての選択肢を提示してユーザーに判断を委ねてください
-7. **メタキーワードの整合性** - サイト全体キーワードとの乖離度（SEO効果はないが内部品質管理として有用）
-8. **E-E-A-T要素** - 専門性(Expertise)、経験(Experience)、権威性(Authoritativeness)、信頼性(Trustworthiness)の観点から評価
-9. **コンテンツ品質** - 発見・学び・娯楽・感動の要素。ユーザー価値を満たすか
+7. **E-E-A-T要素** - 専門性(Expertise)、経験(Experience)、権威性(Authoritativeness)、信頼性(Trustworthiness)の観点から評価
+8. **コンテンツ品質** - 発見・学び・娯楽・感動の要素。ユーザー価値を満たすか
 
 **除外事項**: H2-H6タグ、canonicalタグ、構造化データ、OGP設定、FAQ/How-to/目次、更新日時表記などは不要です。
 上記項目について、すぐに実行できる具体的なアクションプランを提示してください。
@@ -1827,40 +1826,42 @@ def analyze_single_page_with_context(top_url: str, target_url: str, max_pages: i
 
 def _summarize_site_structure(pages: list) -> dict:
     """
-    サイト全体の階層・カテゴリ・頻出語を要約
+    サイト全体の構造とコンテンツキーワードを要約
+    
+    【重要】トップページのmeta name="keywords"をサイト全体の主要キーワードとして使用します。
+    トップページ = サイトの顔であり、制作者がサイト全体のテーマを最も明確に表現しています。
     
     Args:
-        pages: クロールしたページデータのリスト
+        pages: クロールしたページデータのリスト（1番目がトップページ）
         
     Returns:
         dict: サイト構造の要約
             {
                 "page_count": int,
                 "depth_distribution": dict,  # {深さ: ページ数}
-                "top_keywords": list,        # [(キーワード, 出現回数), ...]
+                "top_keywords": list,        # [(キーワード, 1), ...] ※トップページのmeta keywordsから
                 "avg_internal_links": float, # 平均内部リンク数
                 "avg_word_count": float      # 平均文字数
             }
     """
-    from collections import Counter
-    
     depth_map = {}
-    all_path_keywords = []
     total_internal_links = 0
     total_word_count = 0
+    
+    # トップページのmeta keywordsを取得（1番目のページ）
+    top_page_keywords = []
+    if pages:
+        top_page = pages[0]  # クロール開始ページ = トップページ
+        top_page_keywords = top_page.get("meta_keywords_list", [])
     
     for page in pages:
         url = page.get("url", "")
         parsed = urlparse(url)
         path = parsed.path.strip("/")
         
-        # URL深さの計算
+        # URL深さの計算（構造分析用）
         depth = len(path.split("/")) if path else 0
         depth_map[depth] = depth_map.get(depth, 0) + 1
-        
-        # パスからキーワード抽出
-        path_parts = [p for p in path.split("/") if p and len(p) > 2]
-        all_path_keywords.extend(path_parts)
         
         # 内部リンク数
         total_internal_links += page.get("internal_links_count", 0)
@@ -1869,12 +1870,15 @@ def _summarize_site_structure(pages: list) -> dict:
         total_word_count += page.get("body_char_count", page.get("body_word_count", 0))
     
     page_count = len(pages)
-    keyword_counts = Counter(all_path_keywords)
+    
+    # トップページのキーワードを(キーワード, 1)の形式に変換
+    # ※出現回数は意味をなさないため、すべて1とする
+    top_keywords_formatted = [(kw, 1) for kw in top_page_keywords]
     
     return {
         "page_count": page_count,
         "depth_distribution": depth_map,
-        "top_keywords": keyword_counts.most_common(10),
+        "top_keywords": top_keywords_formatted,  # トップページのmeta keywords
         "avg_internal_links": round(total_internal_links / page_count, 1) if page_count > 0 else 0,
         "avg_word_count": round(total_word_count / page_count, 1) if page_count > 0 else 0
     }
@@ -1982,46 +1986,25 @@ def _evaluate_page_with_site_context(page_data: dict, structure_summary: dict) -
         context_adjustments["url_depth"] = -2
         context_bonus -= 2
     
-    # 4. サイト全体のキーワードとの整合性
+    # 4. サイト全体のキーワード（トップページのmeta keywords）との整合性
+    # トップページのmeta keywords = サイト全体の主要テーマ
     top_keywords = [kw for kw, count in structure_summary.get("top_keywords", [])]
     page_title = page_data.get("title", "").lower()
     page_h1 = " ".join(page_data.get("headings", {}).get("h1", [])).lower()
     
     keyword_match = False
-    for kw in top_keywords[:5]:  # 上位5キーワードをチェック
+    for kw in top_keywords[:5]:  # 上位5キーワード（meta keywordsから）をチェック
         if kw.lower() in page_title or kw.lower() in page_h1:
             keyword_match = True
             break
     
     if not keyword_match and top_keywords:
-        suggestions.append(f"サイト全体の主要キーワード（{', '.join(top_keywords[:3])}）との整合性を確認しましょう。")
+        suggestions.append(f"トップページのキーワード（{', '.join(top_keywords[:3])}）との整合性を確認しましょう。サイト全体のテーマとの関連性を意識してください。")
         context_adjustments["keyword_alignment"] = -2
         context_bonus -= 2
     elif keyword_match:
         context_adjustments["keyword_alignment"] = +3
         context_bonus += 3
-    
-    # 5. メタキーワードタグとサイト全体キーワードの整合性チェック
-    meta_keywords_list = page_data.get("meta_keywords_list", [])
-    if meta_keywords_list and top_keywords:
-        # メタキーワードとサイト全体キーワードの共通部分を計算
-        meta_kw_lower = [mk.lower() for mk in meta_keywords_list]
-        site_kw_lower = [sk.lower() for sk in top_keywords[:10]]
-        
-        common_keywords = set(meta_kw_lower) & set(site_kw_lower)
-        alignment_ratio = len(common_keywords) / len(meta_kw_lower) if meta_kw_lower else 0
-        
-        if alignment_ratio < 0.3:  # 30%未満が一致
-            misaligned_keywords = [mk for mk in meta_keywords_list if mk.lower() not in site_kw_lower]
-            suggestions.append(
-                f"メタキーワード（{', '.join(meta_keywords_list[:3])}）がサイト全体の主要テーマと乖離しています。"
-                f"特に『{', '.join(misaligned_keywords[:2])}』はサイト構造との整合性を確認してください。"
-            )
-            context_adjustments["meta_keywords_alignment"] = -2
-            context_bonus -= 2
-        elif alignment_ratio >= 0.7:  # 70%以上が一致
-            context_adjustments["meta_keywords_alignment"] = +2
-            context_bonus += 2
     
     # 最終スコア計算
     contextual_score = max(0, min(100, base_score + context_bonus))
@@ -2049,7 +2032,6 @@ def _build_single_page_context_summary(page_data: dict, structure_summary: dict,
     url = page_data.get("url", "")
     title = page_data.get("title", "")
     description = page_data.get("description", "")
-    meta_keywords = page_data.get("meta_keywords", "")
     h1_list = page_data.get("headings", {}).get("h1", [])
     h1_text = ", ".join(h1_list) if h1_list else "(なし)"
     
@@ -2081,7 +2063,6 @@ def _build_single_page_context_summary(page_data: dict, structure_summary: dict,
 URL: {url}
 タイトル: {title}
 メタディスクリプション: {description}
-メタキーワード: {meta_keywords if meta_keywords else "(設定なし)"}
 H1: {h1_text}
 
 ■ ページの基本指標
@@ -2100,8 +2081,7 @@ H1: {h1_text}
 
 ■ サイト全体構造情報
 - サイト全体: {site_pages}ページ
-- サイト主要キーワード: {top_kw_str}
-- メタキーワードとサイト全体の整合性: {adjustments.get("meta_keywords_alignment", "N/A")}
+- サイト全体の主要キーワード（トップページのmeta keywords）: {top_kw_str}
 
 ■ SEO評価
 - 基本スコア（3カテゴリ評価）: {base_score}点
@@ -2150,7 +2130,7 @@ def _generate_single_page_report_direct(page_data: dict, structure_summary: dict
 
 ## 改善提案項目
 
-1. **タイトルタグ** - 推奨30文字以内（モバイル表示で見切れないように）。キーワード配置、サイト全体との整合性
+1. **タイトルタグ** - 推奨30文字以内（モバイル表示で見切れないように）。トップページのキーワード（サイト全体のテーマ）との整合性を確認
 2. **メタディスクリプションタグ** - 推奨80文字程度（全角で最大80文字まで、SEO3-3より）。魅力的な説明文、CTR向上
 3. **H1タグ** - 推奨25～30文字以内（モバイルでの可読性を考慮）。タイトルとの整合性、キーワード使用、わかりやすさ
 4. **内部リンク戦略** - リンク数、アンカーテキスト多様度、関連性（アンカーテキストとページtitle・H1との類似度で評価）、サイト平均との比較
@@ -2166,9 +2146,8 @@ def _generate_single_page_report_direct(page_data: dict, structure_summary: dict
    【サブページの場合】単純な概念: 1,500字程度、複雑な事柄: 4,000字以上
    【YMYL分野の場合】上記それぞれの文字数の2倍が推奨
    ※ページがどのタイプに該当するかはユーザーの判断に委ね、すべての選択肢を提示してください
-7. **メタキーワードの整合性** - サイト全体キーワードとの乖離度（SEO効果はないが内部品質管理として有用）
-8. **E-E-A-T要素** - 専門性(Expertise)、経験(Experience)、権威性(Authoritativeness)、信頼性(Trustworthiness)の観点から評価
-9. **コンテンツ品質** - 発見・学び・娯楽・感動の要素。ユーザー価値を満たすか
+7. **E-E-A-T要素** - 専門性(Expertise)、経験(Experience)、権威性(Authoritativeness)、信頼性(Trustworthiness)の観点から評価
+8. **コンテンツ品質** - 発見・学び・娯楽・感動の要素。ユーザー価値を満たすか
 
 **除外事項**: H2-H6タグ、canonicalタグ、構造化データ、OGP設定、FAQ/How-to/目次、更新日時表記などは不要です。
 
