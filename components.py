@@ -61,7 +61,7 @@ def display_initial_seo_message():
         st.markdown("社内のSEO関連資料をもとに、あなたのSEOに関する質問にお答えします。")
         
         # 入力例の表示
-        st.code("【入力例】\n・モバイルSEOの最適化方法を教えて\n・ローカルSEOで重要なポイントは？\n・Googleアップデートの対策方法", wrap_lines=True, language=None)
+        st.code("【入力例】\n・モバイルSEOの最適化方法を教えて\n・サブページの推奨文字量は？", wrap_lines=True, language=None)
 
 
 def display_unified_seo_content(content_text, sources=None, latest_info=None):
@@ -112,7 +112,28 @@ def display_unified_seo_content(content_text, sources=None, latest_info=None):
     def clean_unified_display(text: str) -> str:
         # 見出し記号（#）を完全除去
         text = re.sub(r'(?m)^\s*#+\s*', '', text)
+        
+        # 特定の見出しにスタイルを適用（問題①②の解決：見出しを目立たせる）
+        # 注：LLMが**見出し**形式で出力するため、太字記号付きでマッチ
+        # RSS無効化により、2セクション構成に変更
+        section_headings = [
+            "社内資料に基づく基本知識",
+            "実践的な具体策"
+        ]
+        
+        for heading in section_headings:
+            # 太字マークアップ付きの見出しを検出（**見出し** または 見出し 両方に対応）
+            # パターン1: **見出し** 形式
+            pattern_bold = f"(?m)^\\*\\*({re.escape(heading)})\\*\\*$"
+            replacement = f'<span class="seo-section-heading">\\1</span>'
+            text = re.sub(pattern_bold, replacement, text)
+            
+            # パターン2: 見出しのみ（太字なし・フォールバック）
+            pattern_plain = f"(?m)^({re.escape(heading)})$"
+            text = re.sub(pattern_plain, replacement, text)
+        
         # 太字記法は保持（**text** → <strong>text</strong>）
+        # 注：見出しは既に処理済みなので、残りの太字のみ変換される
         text = re.sub(r'\*\*(.*?)\*\*', r'<strong>\1</strong>', text)
         # その他のマークダウン記号を除去
         text = re.sub(r'^\s*[*\-+]\s+', '• ', text, flags=re.MULTILINE)  # リスト記号を統一
@@ -177,6 +198,20 @@ def display_unified_seo_content(content_text, sources=None, latest_info=None):
             margin: 1em 0 0.5em 0 !important;
             color: #1f2937 !important;
         }}
+        
+        /* セクション見出しの強調表示（問題②の解決） */
+        .seo-ultimate-unified .seo-section-heading,
+        [data-testid="stChatMessage"] .seo-ultimate-unified .seo-section-heading,
+        div.stChatMessage .seo-ultimate-unified .seo-section-heading {{
+            display: block !important;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Yu Gothic UI', 'Meiryo', sans-serif !important;
+            font-size: 18px !important;
+            font-weight: bold !important;
+            color: #1f77b4 !important;
+            margin: 16px 0 8px 0 !important;
+            padding-bottom: 4px !important;
+            border-bottom: 2px solid #1f77b4 !important;
+        }}
     </style>
     '''
     st.markdown(unified_content, unsafe_allow_html=True)
@@ -199,17 +234,15 @@ def display_seo_response(llm_response):
             st.info("以下をお試しください：\n- より具体的なSEOキーワードを使用\n- 異なる表現で質問を言い換え\n- 基本的なSEO用語で検索")
             return "SEO情報が見つかりませんでした"
         
-        # ハイブリッドモードの場合は情報源の内訳を表示
+        # RSS無効化により情報源は社内資料のみ - 情報源内訳表示
         if llm_response.get("hybrid_mode", False):
             source_breakdown = llm_response.get("source_breakdown", {})
             if source_breakdown:
                 internal_count = source_breakdown.get("internal", 0)
-                realtime_count = source_breakdown.get("realtime", 0)
                 
-                if internal_count > 0 and realtime_count > 0:
-                    st.info(f"📊 **統合情報**: 社内資料 {internal_count}件 + 最新情報 {realtime_count}件を統合して回答")
-                elif realtime_count > 0:
-                    st.info(f"🔄 **最新情報**: {realtime_count}件の最新SEO情報を含む回答")
+                # 社内資料のみを表示（RSS無効化のため最新情報は表示しない）
+                if internal_count > 0:
+                    st.info(f"� **情報源**: 社内資料 {internal_count}件に基づく回答（SEO検定公式テキスト：2024年8月時点）")
         
         # 通常の回答表示
         answer = llm_response.get("answer", "回答を生成できませんでした。")
@@ -374,7 +407,10 @@ def display_answer_with_sources(answer, sources, latest_info=None):
 
 def display_conversation_log():
     """
-    会話ログの一覧表示（SEO特化版・簡素化）
+    会話ログの一覧表示（SEO特化版・統一CSS適用）
+    
+    問題①の解決：過去のメッセージにも display_unified_seo_content() を適用し、
+    フォントサイズが勝手に変わる問題を解消
     """
     # 会話ログのループ処理
     for message in st.session_state.messages:
@@ -386,18 +422,25 @@ def display_conversation_log():
                 protected_user_content = f'<div class="notranslate" translate="no" lang="ja">{message["content"]}</div>'
                 st.markdown(protected_user_content, unsafe_allow_html=True)
             
-            # AIからの回答の場合（SEO特化版）
+            # AIからの回答の場合（SEO特化版・統一CSS適用）
             else:
-                # 文字列の場合は翻訳防止対策を適用して表示
+                # 文字列の場合は統一フォーマットで表示（問題①の解決）
                 if isinstance(message["content"], str):
-                    protected_ai_content = f'<div class="notranslate" translate="no" lang="ja">{message["content"]}</div>'
-                    st.markdown(protected_ai_content, unsafe_allow_html=True)
+                    # display_unified_seo_content()を使用してフォント統一
+                    display_unified_seo_content(
+                        content_text=message["content"],
+                        sources=None,  # 過去ログではソース情報は表示しない
+                        latest_info=None
+                    )
                 # 辞書形式の場合（下位互換性のため）
                 elif isinstance(message["content"], dict):
-                    # SEO回答として処理（翻訳防止対策適用）
+                    # SEO回答として処理（統一フォーマット適用）
                     if "answer" in message["content"]:
-                        protected_answer = f'<div class="notranslate" translate="no" lang="ja">{message["content"]["answer"]}</div>'
-                        st.markdown(protected_answer, unsafe_allow_html=True)
+                        display_unified_seo_content(
+                            content_text=message["content"]["answer"],
+                            sources=None,
+                            latest_info=None
+                        )
                     else:
                         st.markdown(str(message["content"]))
 
