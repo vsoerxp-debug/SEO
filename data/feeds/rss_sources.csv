@@ -1,0 +1,11 @@
+﻿種別,サイト名,URL,取得方式,説明,制約,優先度,カテゴリ,言語
+公式,Google Search Liaison (X→RSS/Nitter),https://nitter.net/searchliaison/rss,RSS,Google検索公式スポークスパーソンの最新更新。Core Update速報の中心。,Nitter経由のRSS。提供停止の可能性あり。,1,official,en
+専門メディア,Search Engine Roundtable,https://www.seroundtable.com/index.xml,RSS,Googleアップデート速報・検索アルゴリズム変動の最速情報源。,記載なし,1,media,en
+専門メディア,Search Engine Land,https://searchengineland.com/feed,RSS,SEO/SEMの主要ニュース。Googleアップデートや検索動向。,記載なし,2,media,en
+専門メディア,Search Engine Journal,https://rss.searchenginejournal.com/,RSS,SEO・コンテンツ戦略・検索トレンドを幅広くカバー。,記載なし,2,media,en
+専門メディア,Moz Blog,https://moz.com/blog/feed,RSS,SEO調査・分析・検索トレンド記事。,記載なし,3,media,en
+専門メディア,Yoast SEO Blog,https://yoast.com/feed/,RSS,SEO実践・WordPress SEO・検索ベストプラクティス。,記載なし,3,media,en
+公式,Google Search Status Dashboard,https://status.search.google.com/feed,RSS,Google が公式に公開している検索システム・ランキングアルゴリズム更新のフィード,なし,1,Algorithm Update,en
+業界,Search Engine Land - Google Algorithm Updates,https://www.searchengineland.com/feed,RSS,Search Engine Land による Google アルゴリズムアップデート速報と深堀り分析,なし,2,Algorithm Update,en
+業界,Search Engine Roundtable - Algo Updates,https://www.seroundtable.com/index.xml,RSS,Barry Schwartz による Google アルゴリズム変動・アップデート速報,なし,2,Algorithm Update,en
+専門メディア,Marie Haynes - Algorithm & SEO News,https://www.mariehaynes.com/feed,RSS,Marie Haynes による Core Update 中心の詳細分析と品質評価レポート(2025年スパムアップデート含む),なし,2,Algorithm Update,en
