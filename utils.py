@@ -58,7 +58,25 @@ def _load_rss_feeds_from_csv():
         
         # Step 1: CSVファイルからの読み込み
         if os.path.exists(csv_path):
-            df = pd.read_csv(csv_path, encoding='utf-8')
+            # 複数エンコーディング自動判定（フェイルセーフ機構）
+            df = None
+            encodings_to_try = ['utf-8', 'utf-8-sig', 'shift-jis', 'cp932', 'iso-2022-jp']
+            
+            for encoding in encodings_to_try:
+                try:
+                    df = pd.read_csv(csv_path, encoding=encoding)
+                    logger.info(f"CSV読み込み成功: {encoding}エンコーディング")
+                    break
+                except UnicodeDecodeError:
+                    logger.debug(f"CSV読み込み失敗: {encoding}では読めませんでした")
+                    continue
+                except Exception as e:
+                    logger.debug(f"CSV読み込みエラー ({encoding}): {e}")
+                    continue
+            
+            if df is None:
+                logger.error(f"CSV読み込み失敗: 全てのエンコーディングで失敗しました")
+                raise ValueError("CSVファイルの文字コードが不明です")
             
             # 優先度順にソート
             df = df.sort_values(['優先度', 'サイト名'])
@@ -83,7 +101,7 @@ def _load_rss_feeds_from_csv():
                         feeds.append(feed_info)
                         feed_urls_seen.add(feed_url)
             
-            logger.info(f"CSV読み込み完了: {len(feeds)}フィード")
+            logger.info(f"CSV読み込み完了: {len(feeds)}フィード（{', '.join([f['name'] for f in feeds[:3]])}...）")
         else:
             logger.warning(f"RSS設定ファイルが見つかりません: {csv_path}")
         
@@ -113,36 +131,57 @@ def _load_rss_feeds_from_csv():
         return [{'url': url, 'name': 'Default Feed', 'priority': 2} for url in default_feeds]
 
 
-def fetch_latest_seo_info(query, max_articles=5):
+def fetch_latest_seo_info(query, max_articles=10):
     """
     最新SEO情報取得（CSV設定対応・RSS/Atomフィード + 軽量スクレイピング）
     
+    【重要】RSS無効化モード対応:
+    - constants.HYBRID_RAG_CONFIG["RSS_ENABLED"] = False の場合、空リストを返却
+    - 情報源: SEO検定公式テキスト(2024年8月時点)のみに限定
+    
     Args:
         query: 検索クエリ
-        max_articles: 最大記事数
+        max_articles: 最大記事数（デフォルト10件）
         
     Returns:
-        list: 最新記事のDocumentリスト
+        list: 最新記事のDocumentリスト(RSS無効時は空リスト)
     """
     logger = logging.getLogger(ct.LOGGER_NAME)
     
+    # ============================================
+    # 【RSS無効化チェック】
+    # ============================================
+    if not ct.HYBRID_RAG_CONFIG.get("RSS_ENABLED", True):
+        logger.info("[RSS無効化] 最新情報取得をスキップ - SEO検定テキスト(2024年8月時点)のみ使用")
+        return []  # 空リストを返してRSS処理を完全にスキップ
+    
     try:
-        # Step 1: RSS/Atomフィードから基本情報取得
-        latest_articles = _fetch_rss_feeds(query, max_articles)
+        # Step 1: RSS/Atomフィードから基本情報取得(全feed処理、max_articlesは後段で使用)
+        latest_articles = _fetch_rss_feeds(query, max_articles=None)  # Noneで全feed処理
         
         # Step 2: 記事の詳細コンテンツ取得（軽量スクレイピング）
         enhanced_articles = _enhance_articles_with_scraping(latest_articles)
         
         # Step 3: Documentオブジェクトとしてフォーマットとメタデータ付与
-        documents = _convert_articles_to_documents(enhanced_articles, query)
+        all_documents = _convert_articles_to_documents(enhanced_articles, query)
         
-        logger.info(f"最新情報取得完了: {len(documents)}件")
-        return documents
+        # Step 4: feed優先度とfreshnessでランキングし、上位max_articles件を選択
+        ranked_documents = sorted(all_documents, key=lambda doc: (
+            doc.metadata.get('priority_level', 3),  # 優先度レベル(1=高, 3=低)
+            -doc.metadata.get('freshness_score', 0.5)  # 新しさスコア(降順)
+        ))[:max_articles]  # 上位max_articles件
+        
+        logger.info(f"[RSS取得] 完了: {len(ranked_documents)}件(全{len(all_documents)}件から選択)")
+        return ranked_documents
         
     except Exception as e:
         logger.error(f"最新情報取得エラー: {e}")
         return []  # エラー時は空リストを返してシステム継続
 
+
+############################################################
+# RSS/Atom フィード処理
+############################################################
 
 def _fetch_rss_feeds(query, max_articles):
     """
@@ -154,10 +193,30 @@ def _fetch_rss_feeds(query, max_articles):
     # CSV設定からフィード情報を読み込み
     feed_configs = _load_rss_feeds_from_csv()
     
+    # feed別の取得件数カウント用辞書
+    feed_stats = {}
+    
+    # デバッグ: 処理開始前のfeed数確認
+    logger.info(f"[RSS取得内訳] 処理対象feed数: {len(feed_configs)}件")
+    
     for feed_config in feed_configs:
         try:
-            feed_url = feed_config.get('url') if isinstance(feed_config, dict) else feed_config
+            # feed名を最優先で取得（エラー時も統計記録できるよう）
             feed_name = feed_config.get('name', 'Unknown Site') if isinstance(feed_config, dict) else 'Unknown Site'
+            
+            # feed統計初期化（どんなエラーでも記録されるよう最優先で実行）
+            if feed_name not in feed_stats:
+                feed_stats[feed_name] = 0
+                logger.info(f"[RSS取得内訳] feed登録: {feed_name}")
+            
+            # max_articles=Noneの場合は全feed処理(スキップなし)
+            # max_articles指定時は目標達成済みの場合スキップ
+            if max_articles is not None and len(articles) >= max_articles:
+                logger.info(f"[RSS取得内訳] 目標達成済みのため取得スキップ: {feed_name}")
+                continue
+            
+            # feed URL取得
+            feed_url = feed_config.get('url') if isinstance(feed_config, dict) else feed_config
             
             # フィード取得（タイムアウト設定）
             feed = feedparser.parse(feed_url)
@@ -165,7 +224,12 @@ def _fetch_rss_feeds(query, max_articles):
             # フィード解析成功確認
             if not hasattr(feed, 'entries') or not feed.entries:
                 logger.warning(f"フィード取得失敗またはエントリなし: {feed_url}")
+                # feed_statsは既に0で初期化済みなのでcontinue
                 continue
+            
+            # デバッグ: Marie Haynes feedの詳細ログ
+            if 'marie haynes' in feed_name.lower():
+                logger.info(f"[Marie Haynes Debug] feed取得成功、エントリ数: {len(feed.entries)}")
             
             # 関連記事のフィルタリングと取得（デバッグ強化版）
             for entry in feed.entries[:5]:  # 各フィードから最大5記事に増加
@@ -173,8 +237,17 @@ def _fetch_rss_feeds(query, max_articles):
                     entry_title = entry.get('title', 'No title')
                     entry_summary = entry.get('summary', '')
                     
+                    # デバッグ: Marie Haynes feed記事詳細
+                    if 'marie haynes' in feed_name.lower():
+                        logger.info(f"[Marie Haynes Debug] 記事: {entry_title}")
+                        logger.info(f"[Marie Haynes Debug] summary抜粋: {entry_summary[:100]}...")
+                    
                     # 関連性チェック（詳細ログ付き）
                     is_relevant = _is_article_relevant(query, entry_title, entry_summary)
+                    
+                    # デバッグ: Marie Haynes feed関連性判定結果
+                    if 'marie haynes' in feed_name.lower():
+                        logger.info(f"[Marie Haynes Debug] 関連性判定: {is_relevant}")
                     
                     # AI Mode等の重要キーワードが含まれている場合は強制的に取得
                     force_include_keywords = ['ai mode', 'ai overviews', 'core update', 'spam update', 'コア更新', 'スパム更新']
@@ -198,8 +271,10 @@ def _fetch_rss_feeds(query, max_articles):
                             'force_included': force_include  # 強制取得フラグ
                         }
                         articles.append(article_data)
+                        feed_stats[feed_name] += 1  # feed別カウント増加
                         
-                        if len(articles) >= max_articles:
+                        # max_articles=Noneの場合は上限チェックをスキップ(全記事取得)
+                        if max_articles is not None and len(articles) >= max_articles:
                             break
                     else:
                         # デバッグ：関連性がない記事をログ出力
@@ -219,11 +294,29 @@ def _fetch_rss_feeds(query, max_articles):
         except Exception as feed_error:
             logger.warning(f"フィード取得エラー: {feed_url}, {feed_error}")
             continue
-        
-        if len(articles) >= max_articles:
-            break
     
+    # RSS取得完了ログ（総数）
     logger.info(f"RSS取得完了: {len(articles)}件")
+    
+    # デバッグ: feed_stats最終状態
+    logger.info(f"[RSS取得内訳] 全feed処理完了、登録feed数: {len(feed_stats)}件(目標: {len(feed_configs)}件)")
+    
+    # feed別取得内訳の詳細ログ
+    if feed_stats:
+        logger.info(f"[RSS取得内訳] feed別の取得件数:")
+        # 取得件数が多い順にソート
+        sorted_stats = sorted(feed_stats.items(), key=lambda x: x[1], reverse=True)
+        for feed_name, count in sorted_stats:
+            if count > 0:
+                logger.info(f"  ✅ {feed_name}: {count}件")
+        
+        # 0件のfeedを警告表示
+        zero_feeds = [name for name, count in feed_stats.items() if count == 0]
+        if zero_feeds:
+            logger.warning(f"[RSS取得内訳] 取得件数0件のfeed({len(zero_feeds)}件):")
+            for feed_name in zero_feeds:
+                logger.warning(f"  ⚠️ {feed_name}: 0件 (関連記事なし or フィード取得失敗)")
+    
     # 保険: max_articlesを確実に守る
     return articles[:max_articles]
 
@@ -472,11 +565,20 @@ def _is_seo_related_query(query):
         'google', 'bing', 'yahoo', '検索エンジン', 'search engine',
         'アルゴリズム', 'algorithm', 'ランキング', 'ranking',
         'インデックス', 'index', 'クロール', 'crawl', 'crawler',
-        'キーワード', 'keyword', 'メタタグ', 'meta tag', 'meta',
+        'キーワード', 'keyword', 
+        # HTMLタグ・メタ情報関連（重要）
+        'メタタグ', 'meta tag', 'meta', 'メタディスクリプション', 'meta description', 'description',
+        'メタキーワード', 'meta keywords', 'canonicalタグ', 'canonical', 'hreflang', 'hreflangタグ',
+        'ogタグ', 'og tag', 'open graph', 'opengraph',
         'サイトマップ', 'sitemap', 'robots.txt', 'robots',
         'オーガニック', 'organic', 'serp', '検索結果',
         'ページ速度', 'page speed', 'core web vitals', 'core web vital', 'vitals', 'vital',
-        'バックリンク', 'backlink', 'link building',
+        'バックリンク', 'backlink', 'link building', '被リンク',
+        # リンク・構造関連
+        'リダイレクト', 'redirect', '301', '302', '正規化', 'canonicalization',
+        '重複コンテンツ', 'duplicate content', 'パンくずリスト', 'breadcrumb',
+        '内部リンク', 'internal link', '外部リンク', 'external link', 'outbound link',
+        'アンカーテキスト', 'anchor text', 'anchor',
         # ビジュアル・アクセシビリティ関連
         'visual aid', 'ビジュアルエイド', 'visual', 'accessibility', 'アクセシビリティ',
         'alt text', 'altテキスト', 'alt属性', 'image optimization', '画像最適化',
@@ -499,15 +601,26 @@ def _is_seo_related_query(query):
         # 新しいSEO概念・用語（2024-2025年）
         'fluqs', 'fluq', 'sgе', 'zero-click search', 'ゼロクリック検索',
         'featured snippet', 'フィーチャードスニペット', 'knowledge graph', 'ナレッジグラフ',
-        'people also ask', 'paa', '関連する質問', 'entity seo', 'エンティティseo'
+        'people also ask', 'paa', '関連する質問', 'entity seo', 'エンティティseo',
+        # コンテンツSEO関連
+        '見出しタグ', 'heading tag', 'heading', 'キーワード密度', 'keyword density',
+        'lsiキーワード', 'lsi', 'latent semantic', '共起語', 'co-occurrence',
+        '検索意図', 'search intent', 'user intent', 'intent', 'ユーザー意図',
+        'ロングテール', 'long tail', 'longtail', 'ロングテールキーワード',
+        # モバイル・UX・パフォーマンス
+        'ページエクスペリエンス', 'page experience', 'lcp', 'fid', 'cls',
+        'largest contentful paint', 'first input delay', 'cumulative layout shift',
+        # ローカルSEO追加
+        'nap', 'name address phone', '口コミ', 'review', 'レビュー',
+        'ビジネスプロフィール', 'business profile', 'gbp'
     ]
     
     # 関連SEO用語
     related_seo_terms = [
-        'ウェブサイト', 'website', 'web site', 'ホームページ',
-        'コンテンツ', 'content', 'ページ', 'page',
-        'ドメイン', 'domain', 'url', 'リンク', 'link',
-        'タイトルタグ', 'title tag', 'h1', 'h2', 'h3',
+        'ウェブサイト', 'website', 'web site', 'ホームページ', 'webページ',
+        'コンテンツ', 'content', 'ページ', 'page', 'html', 'タグ', 'tag',
+        'ドメイン', 'domain', 'url', 'リンク', 'link', 'href',
+        'タイトルタグ', 'title tag', 'title', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
         'ペナルティ', 'penalty', '順位', '検索', 'search', '最適化', 'optimization',
         # SEO関連の追加用語
         'webmaster', 'ウェブマスター', 'analytics', 'アナリティクス',
@@ -885,6 +998,15 @@ def _apply_ai_quality_scoring(documents, query):
     AIによる記事品質スコアリング（多層評価システム）
     """
     scored_docs = []
+    logger = logging.getLogger(ct.LOGGER_NAME)
+    
+    # ★★★ Phase A1+: 入力文書の詳細診断ログ ★★★
+    logger.info(f"[AIスコアリング開始] 入力文書数: {len(documents)}件")
+    for idx, doc in enumerate(documents):
+        source_type = doc.metadata.get('source_type', 'unknown') if hasattr(doc, 'metadata') else 'NO_ATTR'
+        title = doc.metadata.get('title', 'No title') if hasattr(doc, 'metadata') else 'NO_ATTR'
+        logger.info(f"  [入力{idx+1}] type={source_type:8s}, title={title[:50] if title else '(empty)'}, "
+                   f"metadata_keys={list(doc.metadata.keys()) if hasattr(doc, 'metadata') else 'NO_METADATA'}")
     
     for doc in documents:
         try:
@@ -900,6 +1022,10 @@ def _apply_ai_quality_scoring(documents, query):
             # 総合スコア（加重平均）
             total_score = (trust_score * 0.3 + relevance_score * 0.4 + quality_score * 0.3)
             
+            # realtime文書の最低スコア保証（最新情報の価値を担保）
+            if doc.metadata.get('source_type') == 'realtime':
+                total_score = max(total_score, 75)  # 最低75点を保証
+            
             # スコア情報をメタデータに追加
             doc_with_score = Document(
                 page_content=doc.page_content,
@@ -914,12 +1040,35 @@ def _apply_ai_quality_scoring(documents, query):
                 }
             )
             
-            # 品質基準を満たすもののみ採用（総合スコア60以上）
-            if total_score >= 60:
+            # ★★★ Phase B1: source別の品質基準閾値 ★★★
+            source_type = doc.metadata.get('source_type', 'unknown')
+            if source_type == 'realtime':
+                threshold = 55  # realtime: 55点基準(最低保証75点により実質的に高基準)
+            elif source_type == 'internal':
+                threshold = 50  # internal: 50点基準(Phase B1.1: 55→50にさらに緩和、除外過多を解消)
+            else:
+                threshold = 60  # その他: 60点基準(デフォルト)
+            
+            # 品質基準を満たすもののみ採用
+            if total_score >= threshold:
                 scored_docs.append(doc_with_score)
+            else:
+                # ★★★ Phase A1+: 除外理由の詳細ログ(INFOレベルで確実出力) ★★★
+                logger = logging.getLogger(ct.LOGGER_NAME)
+                title = doc.metadata.get('title', 'No title')
+                logger.info(f"[AIスコア除外] score={total_score:.1f}<{threshold}, type={source_type}, "
+                           f"trust={trust_score:.1f}, rel={relevance_score:.1f}, qual={quality_score:.1f}, "
+                           f"title={title[:40]}")
                 
         except Exception as e:
-            # スコアリングエラー時はデフォルトスコアで継続
+            # ★★★ Phase A1+: 例外詳細ログ追加 ★★★
+            logger = logging.getLogger(ct.LOGGER_NAME)
+            source_type = doc.metadata.get('source_type', 'unknown') if hasattr(doc, 'metadata') else 'unknown'
+            logger.error(f"[AIスコアリング例外] type={source_type}, error={str(e)}, metadata={doc.metadata if hasattr(doc, 'metadata') else 'NO_METADATA'}")
+            import traceback
+            logger.error(f"[AIスコアリング例外] スタックトレース: {traceback.format_exc()}")
+            
+            # スコアリングエラー時はデフォルトスコア50で継続 → 60点基準で除外される
             doc_with_score = Document(
                 page_content=doc.page_content,
                 metadata={
@@ -932,7 +1081,8 @@ def _apply_ai_quality_scoring(documents, query):
                     }
                 }
             )
-            scored_docs.append(doc_with_score)
+            # デフォルトスコア50点なので60点基準で除外される
+            logger.info(f"[AIスコア除外] score=50.0<60(例外発生), type={source_type}, エラーによりデフォルト50点")
     
     # 総合スコア順にソート（Document.metadataを正しく参照）
     return sorted(scored_docs, key=lambda x: x.metadata.get('ai_scores', {}).get('total', 0), reverse=True)
@@ -942,18 +1092,23 @@ def _calculate_trust_score(doc):
     """信頼性スコア計算"""
     score = 50  # ベーススコア
     
+    # realtime文書には高い信頼性を付与（最新情報の価値）
+    if doc.metadata.get('source_type') == 'realtime':
+        score += 30  # リアルタイム情報ブースト
+    
     # ソース権威性
-    source_url = doc.get('url', '')
+    source_url = doc.metadata.get('source', '')
     if 'google.com' in source_url or 'searchengineland.com' in source_url:
         score += 30
-    elif 'moz.com' in source_url:
+    elif 'moz.com' in source_url or 'ahrefs.com' in source_url or 'semrush.com' in source_url:
         score += 25
     
     # 新しさ（日付情報がある場合）
-    if doc.get('date'):
+    published_date = doc.metadata.get('published_date')
+    if published_date:
         try:
             from datetime import datetime, timedelta
-            if isinstance(doc['date'], str):
+            if isinstance(published_date, str):
                 # 最近30日以内なら加点
                 now = datetime.now()
                 recent_threshold = now - timedelta(days=30)
@@ -965,20 +1120,74 @@ def _calculate_trust_score(doc):
 
 
 def _calculate_relevance_score(doc, query):
-    """関連性スコア計算"""
+    """関連性スコア計算(改善版: 適切なトークン分割 + Phase B2.1-A)"""
     score = 30  # ベーススコア
     
-    query_words = query.lower().split()
-    content = (doc.get('title', '') + ' ' + doc.get('content', '')).lower()
+    # ★★★ 改善: クエリを適切に分割 ★★★
+    import re
+    query_lower = query.lower()
     
-    # キーワードマッチング
-    matches = sum(1 for word in query_words if word in content and len(word) > 2)
-    score += min(matches * 15, 50)
+    # ★★★ Phase B2.1-A: 定型フレーズの事前削除 ★★★
+    # SEO意味論と無関係な質問形式フレーズを除去(年号・SEO用語は保持)
+    noise_phrases = [
+        '教えて', 'ください', '下さい', 'について', 'とは', 
+        'に関して', 'の情報', 'のこと', 'ですか', 'でしょうか',
+        'おしえて', 'お願いします', 'お願い', 'したい', 'したいです'
+    ]
+    for phrase in noise_phrases:
+        query_lower = query_lower.replace(phrase, ' ')
+    
+    # 日本語・英数字の単語を抽出(1文字以上、助詞・記号を除外)
+    query_words_raw = re.findall(r'[\w]+', query_lower)
+    # 2文字以上の意味のある単語のみを対象(「に」「を」「て」などを除外)
+    query_words = [w for w in query_words_raw if len(w) >= 2]
+    
+    # 追加: 数字を含む単語は1文字でも有効(「2025年」→「2025」「年」)
+    query_words_with_numbers = [w for w in query_words_raw if any(c.isdigit() for c in w)]
+    query_words.extend(query_words_with_numbers)
+    query_words = list(set(query_words))  # 重複除去
+    
+    title = doc.metadata.get('title', '')
+    content = doc.page_content
+    combined_text = (title + ' ' + content).lower()
+    
+    # キーワードマッチング(改善版)
+    matches = sum(1 for word in query_words if word in combined_text)
+    score += min(matches * 12, 50)  # 15→12に調整(マッチ数が増えるため)
     
     # SEO専門用語の密度
-    seo_terms = ['seo', 'google', 'algorithm', 'ranking', 'optimization']
-    seo_matches = sum(1 for term in seo_terms if term in content)
+    seo_terms = ['seo', 'google', 'algorithm', 'ranking', 'optimization', 'update', 'アップデート', 'コア更新', 'グーグル', '検索', '最適化']
+    seo_matches = sum(1 for term in seo_terms if term in combined_text)
     score += min(seo_matches * 5, 20)
+    
+    # ★★★ Phase B3-1.5: 年号パターン優先Boost ★★★
+    # クエリに年号が含まれる場合、文書内の年号マッチングを強化
+    import re
+    query_years = re.findall(r'\b(20\d{2})\b', query_lower)  # 2000-2099
+    if query_years:
+        # 文書内に同じ年号が含まれている場合、大幅に加点
+        doc_years = re.findall(r'\b(20\d{2})\b', combined_text)
+        matching_years = set(query_years) & set(doc_years)
+        if matching_years:
+            score += 25  # 年号マッチで+25点(時間的関連性を重視)
+    
+    # ★★★ Phase B3-2: SEOアップデート文脈キーワード強化 ★★★
+    # クエリに「アップデート」関連語が含まれる場合、文書の文脈を厳密に判定
+    update_query_keywords = ['アップデート', 'update', '更新', '変更', 'コアアップデート', '順位変動']
+    query_has_update = any(kw in query_lower for kw in update_query_keywords)
+    
+    if query_has_update:
+        # SEOアップデート文脈キーワード(検索品質・ランキング関連)
+        seo_context_keywords = [
+            'アップデート', 'core update', 'update', '順位変動', 'algorithm', 'アルゴリズム',
+            '検索品質', '評価', 'ランキング', 'ranking', 'コア更新', 'コアアップデート',
+            'search quality', 'quality update', 'spam update', 'スパムアップデート'
+        ]
+        has_seo_context = any(kw in combined_text for kw in seo_context_keywords)
+        
+        if not has_seo_context:
+            # アップデートクエリなのにSEO文脈がない場合、減点(技術情報と判断)
+            score -= 15
     
     return min(score, 100)
 
@@ -987,8 +1196,8 @@ def _calculate_quality_score(doc):
     """品質スコア計算"""
     score = 40  # ベーススコア
     
-    content = doc.get('content', '')
-    title = doc.get('title', '')
+    content = doc.page_content
+    title = doc.metadata.get('title', '')
     
     # コンテンツ長（適切な情報量）
     if len(content) > 500:
@@ -997,11 +1206,11 @@ def _calculate_quality_score(doc):
         score += 10
     
     # タイトルの質（具体性）
-    if len(title) > 20 and any(word in title.lower() for word in ['how', 'what', 'why', '方法', '対策']):
+    if len(title) > 20 and any(word in title.lower() for word in ['how', 'what', 'why', '方法', '対策', 'update', 'アップデート']):
         score += 15
     
     # 実用的なキーワード
-    practical_terms = ['tips', 'guide', 'best practices', 'コツ', 'ガイド', '手順']
+    practical_terms = ['tips', 'guide', 'best practices', 'コツ', 'ガイド', '手順', 'update', 'announcement']
     if any(term in content.lower() for term in practical_terms):
         score += 15
     
@@ -1509,6 +1718,102 @@ class HybridRAGSystem:
         self.cache_retriever = None      # 短期キャッシュ（未実装）
         self.logger = logging.getLogger(ct.LOGGER_NAME)
     
+    def _classify_query_type(self, query):
+        """
+        Phase A2: クエリを時間依存度に応じて3分類
+        
+        分類:
+        - time_dependent: 年号 + アップデート系語が含まれる時間依存クエリ
+        - new_tech: AI/新技術関連クエリ
+        - general_seo: 一般的なSEOクエリ
+        """
+        query_lower = query.lower()
+        
+        # 時間依存クエリ判定(ChatGPT改善案: 年号 + アップデート系語の AND 条件)
+        import re
+        year_pattern = r'(20\d{2})'  # 年号(2000-2099) - 日本語対応のため単語境界なし
+        has_year = re.search(year_pattern, query_lower)
+        
+        update_keywords = [
+            'アップデート', 'update', 'core update', 'spam update',
+            'コアアップデート', 'スパムアップデート',
+            '変動', 'アルゴリズム', 'algorithm',
+            'ランキング変動', '検索評価', '検索アルゴリズム'
+        ]
+        has_update = any(kw in query_lower for kw in update_keywords)
+        
+        # 年号 + アップデート系語の AND 条件で厳密判定
+        if has_year and has_update:
+            return 'time_dependent'
+        
+        # 新技術クエリ判定
+        new_tech_keywords = [
+            'ai', '生成ai', 'chatgpt', 'gemini', 'gpt',
+            '新機能', '新しい', '最先端', 'ai overviews', 'ai overview',
+            '機械学習', 'ディープラーニング', 'ai mode'
+        ]
+        if any(kw in query_lower for kw in new_tech_keywords):
+            return 'new_tech'
+        
+        # デフォルト: 一般SEOクエリ
+        return 'general_seo'
+    
+    def _classify_seo_article_type(self, title: str, content: str) -> str:
+        """
+        Phase D: SEO記事のタイプを分類
+        
+        目的: ユーザーの質問意図に応じた記事優先度付け
+        例: 「2025年のアップデート」→コアアルゴリズム変更を最優先、UI変更は下位へ
+        
+        Args:
+            title: 記事タイトル
+            content: 記事本文
+        
+        Returns:
+            記事タイプ:
+            - "core_update": コアアルゴリズムアップデート(検索順位に直接影響)
+            - "tool_update": Search Console等ツールアップデート
+            - "ui_change": UI/機能変更(検索順位に影響なし)
+            - "guidance": SEOガイダンス・ベストプラクティス
+        """
+        title_lower = title.lower()
+        content_lower = content.lower()
+        
+        # コアアップデート判定(最優先)
+        core_keywords = [
+            'core update', 'core algorithm', 'broad core',
+            'コアアップデート', 'コアアルゴリズム', 'アルゴリズムアップデート',
+            'ranking update', 'search ranking', 'algorithm change',
+            'spam update', 'helpful content', 'product review',
+            'ランキング変動', '検索順位', '順位変動',
+            'ペナルティ', 'penalty', 'manual action'
+        ]
+        if any(kw in title_lower or kw in content_lower for kw in core_keywords):
+            return "core_update"
+        
+        # UI変更判定(低優先度)
+        ui_keywords = [
+            'doodle', 'widget', 'ui test', 'interface', 'design',
+            'hover', 'inline', 'ai mode', 'discover tests',
+            'seasonal', 'holiday', 'logo', 'icon',
+            'layout', 'button', 'navigation', 'menu'
+        ]
+        if any(kw in title_lower for kw in ui_keywords):
+            return "ui_change"
+        
+        # Search Console等ツール判定(中優先度)
+        tool_keywords = [
+            'search console', 'analytics', 'indexing report',
+            'サーチコンソール', 'インデックス', 'クロール',
+            'webmaster', 'tools', 'api', 'reporting',
+            'performance report', 'coverage report'
+        ]
+        if any(kw in title_lower or kw in content_lower for kw in tool_keywords):
+            return "tool_update"
+        
+        # デフォルト: ガイダンス
+        return "guidance"
+    
     def search(self, query, include_latest=True):
         """
         統合検索（既存システムを拡張）
@@ -1674,23 +1979,57 @@ class HybridRAGSystem:
             # 総合スコア計算
             total_score = base_score * priority_weight * source_weight
             
-            # ★★★ realtime文書にスコアブーストを適用 ★★★
+            # ★★★ Phase A2: クエリ依存型リアルタイムブースト ★★★
             if source_type == 'realtime':
-                query_lower = query.lower()
-                boost_keywords = [
-                    'アップデート', '最新', '2025', '2024',
-                    'core update', 'spam update', 'コア更新', 'スパム更新',
-                    'ai mode', 'ai overviews', 'gemini',
-                    'update', 'latest', 'new', 'recent'
-                ]
-                if any(keyword in query_lower for keyword in boost_keywords):
-                    total_score *= 1.5  # 1.5倍のブースト
-                    self.logger.info(f"[リアルタイムブースト] スコア: {total_score:.3f} (文書: {metadata.get('title', 'No title')[:30]}...)")
+                query_type = self._classify_query_type(query)
+                
+                # ★★★ Phase D: 記事タイプ別boost調整 ★★★
+                article_type = self._classify_seo_article_type(
+                    metadata.get('title', ''),
+                    doc.page_content[:500]  # パフォーマンス考慮で先頭500文字のみ
+                )
+                
+                # クエリタイプと記事タイプの組み合わせでboost決定
+                if query_type == 'time_dependent':
+                    # 時間依存クエリの場合、記事タイプで大きく差をつける
+                    article_boost_mapping = {
+                        'core_update': 1.5,   # コアアップデート: 最優先
+                        'tool_update': 1.2,   # ツールアップデート: 高優先
+                        'guidance': 1.0,      # ガイダンス: 標準
+                        'ui_change': 0.6      # UI変更: 低優先(検索順位に無関係)
+                    }
+                    boost_factor = article_boost_mapping.get(article_type, 1.0)
+                    self.logger.info(f"[Phase D] article_type={article_type}, boost={boost_factor:.2f}")
+                elif query_type == 'new_tech':
+                    # 新技術クエリの場合、記事タイプの差は小さめ
+                    article_boost_mapping = {
+                        'core_update': 0.9,
+                        'tool_update': 0.8,
+                        'guidance': 0.8,
+                        'ui_change': 0.7
+                    }
+                    boost_factor = article_boost_mapping.get(article_type, 0.8)
+                    self.logger.info(f"[Phase D] article_type={article_type}, boost={boost_factor:.2f}")
+                else:  # general_seo
+                    # 一般SEOクエリの場合、従来のboost値を維持
+                    boost_factor = 0.4
+                    self.logger.info(f"[Phase D] article_type={article_type}, boost={boost_factor:.2f} (general_seo)")
+                
+                total_score = min(total_score + boost_factor, 1.0)  # 上限1.0でクリップ
+                self.logger.info(f"[Phase A2+D] query_type={query_type}, article_type={article_type}, boost={boost_factor:.2f}, score={total_score:.3f}, doc={metadata.get('title', 'No title')[:40]}")
             
             scored_docs.append((doc, total_score))
         
         # スコア順でソート
         scored_docs.sort(key=lambda x: x[1], reverse=True)
+        
+        # ★★★ Phase A1: ランキング詳細ログ追加 ★★★
+        self.logger.info(f"[ランキング詳細] Top 10 文書:")
+        for i, (doc, score) in enumerate(scored_docs[:10]):
+            source_type = doc.metadata.get('source_type', 'unknown')
+            title = doc.metadata.get('title', 'No title')
+            priority = doc.metadata.get('priority', 0)
+            self.logger.info(f"  [{i+1}] score={score:.4f}, type={source_type:8s}, pri={priority}, title={title[:45]}")
         
         # 上位文書を返す（最大10件）
         return [doc for doc, score in scored_docs[:10]]
@@ -1721,15 +2060,16 @@ def get_llm_response(chat_message, skip_seo_check=False):
         logger = logging.getLogger(ct.LOGGER_NAME)
         logger.info(f"非SEO関連クエリを拒否: {chat_message}")
         return {
-            "answer": "申し訳ございませんが、こちらはSEO（検索エンジン最適化）専門のアシスタントです。SEOに関するご質問をお願いいたします。\n\n例：\n- Googleアルゴリズムの最新動向\n- キーワード選定のコツ\n- ページ速度の改善方法\n- メタタグの最適化",
+            "answer": "申し訳ございませんが、こちらはSEO（検索エンジン最適化）専門のアシスタントです。SEOに関するご質問をお願いいたします。",
             "sources": [],
             "hybrid_mode": False,
             "seo_related": False
         }
     
     try:
+        # ★★★ Phase B3-3.1: skip_seo_checkをハイブリッドRAGに伝播 ★★★
         # ハイブリッドRAGシステムを使用した拡張検索
-        return _get_llm_response_hybrid(chat_message)
+        return _get_llm_response_hybrid(chat_message, disable_realtime=skip_seo_check)
     except Exception as e:
         # フォールバック：従来システム
         logger = logging.getLogger(ct.LOGGER_NAME)
@@ -1738,14 +2078,26 @@ def get_llm_response(chat_message, skip_seo_check=False):
         return _get_llm_response_internal(chat_message)
 
 
-def _get_llm_response_hybrid(chat_message):
+def _get_llm_response_hybrid(chat_message, disable_realtime=False):
     """
     ハイブリッドRAGシステムを使用した回答生成
+    
+    Args:
+        chat_message: ユーザー入力値
+        disable_realtime: True の場合、realtime注入を完全に無効化（ドメイン解析モード用）
     """
     logger = logging.getLogger(ct.LOGGER_NAME)
     
+    # 文字数質問の検出（デバッグ用）
+    is_content_volume_query = any(kw in chat_message for kw in 
+        ['文字数', '推奨', 'メインページ', 'サブページ', 'トップページ', '何文字'])
+    
     try:
         logger.info(f"[ハイブリッドRAG] 開始: {chat_message[:50]}...")
+        if is_content_volume_query:
+            logger.info(f"[文字数質問検出] クエリ: {chat_message[:50]}... → プロンプト内文字数情報を使用")
+        if disable_realtime:
+            logger.info(f"[Phase B3-3.1] ドメイン解析モード: realtime注入を完全無効化")
         
         # ハイブリッドRAGシステム初期化
         hybrid_system = HybridRAGSystem()
@@ -1759,24 +2111,70 @@ def _get_llm_response_hybrid(chat_message):
         realtime_count = sum(1 for doc in enhanced_docs if doc.metadata.get('source_type') == 'realtime')
         logger.info(f"[リアルタイム保証] enhanced_docs内のrealtime数: {realtime_count}/{len(enhanced_docs)}")
         
-        if realtime_count == 0:
-            # enhanced_docsにrealtimeが1件も含まれていない場合、直接取得して注入
-            logger.warning("[リアルタイム保証] enhanced_docsにrealtimeなし、強制注入を試行")
-            try:
-                realtime_補完 = fetch_latest_seo_info(chat_message, max_articles=3)
-                if realtime_補完:
-                    if len(enhanced_docs) > 0:
-                        # 末尾1件をrealtime文書で置換
-                        enhanced_docs[-1] = realtime_補完[0]
-                        logger.info(f"[リアルタイム保証] realtime文書を1件注入完了: {realtime_補完[0].metadata.get('title', 'No title')[:30]}...")
+        # ★★★ Phase A1: リアルタイム保証前の文書詳細ログ ★★★
+        logger.info(f"[リアルタイム保証] 文書詳細:")
+        for i, doc in enumerate(enhanced_docs):
+            source_type = doc.metadata.get('source_type', 'unknown')
+            title = doc.metadata.get('title', 'No title')
+            logger.info(f"  [{i+1}] type={source_type:8s}, title={title[:50]}")
+        
+        # ★★★ Phase B3-3.1: ドメイン解析モードではrealtime注入を完全スキップ ★★★
+        if disable_realtime:
+            logger.info(f"[Phase B3-3.1] ドメイン解析モード: realtime強制注入をスキップ")
+        elif realtime_count == 0:
+            # ★★★ Phase B3-3: 強制注入条件の厳格化 ★★★
+            # クエリの文脈を確認(年号/アップデート関連のみ注入許可)
+            import re
+            query_lower = chat_message.lower()
+            query_years = re.findall(r'\b(20\d{2})\b', query_lower)  # 2000-2099年を検出
+            update_keywords = ['アップデート', 'update', '更新', '変更', 'コアアップデート', '順位変動', '最新']
+            query_has_update = any(kw in query_lower for kw in update_keywords)
+            
+            # 注入許可判定: 年号 OR アップデート文脈が必要
+            should_inject = bool(query_years) or query_has_update
+            
+            if should_inject:
+                logger.info(f"[Phase B3-3] 注入条件OK: 年号={query_years}, アップデート文脈={query_has_update}")
+                # enhanced_docsにrealtimeが1件も含まれていない場合、直接取得して注入
+                logger.warning("[リアルタイム保証] enhanced_docsにrealtimeなし、強制注入を試行")
+                try:
+                    realtime_補完 = fetch_latest_seo_info(chat_message, max_articles=3)
+                    if realtime_補完:
+                        # ★★★ Phase B3-3: relevance閾値を30→45に引き上げ ★★★
+                        logger.info(f"[Phase B3-3] realtime文書のrelevance評価開始: {len(realtime_補完)}件")
+                        filtered_realtime = []
+                        for doc in realtime_補完:
+                            relevance = _calculate_relevance_score(doc, chat_message)
+                            title = doc.metadata.get('title', 'No title')
+                            if relevance >= 45:  # 閾値45点以上に厳格化(Gemini記事を完全除外)
+                                filtered_realtime.append(doc)
+                                logger.info(f"[Phase B3-3] ✓ 通過: relevance={relevance:.1f}≥45, title={title[:50]}")
+                            else:
+                                logger.info(f"[Phase B3-3] ✗ 除外: relevance={relevance:.1f}<45, title={title[:50]}")
+                        
+                        logger.info(f"[Phase B3-3] relevance評価完了: {len(realtime_補完)}件 → {len(filtered_realtime)}件通過")
+                        
+                        if filtered_realtime:
+                            if len(enhanced_docs) > 0:
+                                # ★STEP3実装: 末尾2件をrealtime文書で置換(最大2件まで注入)
+                                num_to_inject = min(len(filtered_realtime), 2, len(enhanced_docs))
+                                enhanced_docs[-num_to_inject:] = filtered_realtime[:num_to_inject]
+                                logger.info(f"[リアルタイム保証] realtime文書を{num_to_inject}件注入完了:")
+                                for i, doc in enumerate(filtered_realtime[:num_to_inject]):
+                                    logger.info(f"  注入[{i+1}]: {doc.metadata.get('title', 'No title')[:50]}...")
+                            else:
+                                # enhanced_docsが空の場合はrealtime最大2件を設定
+                                num_to_inject = min(len(filtered_realtime), 2)
+                                enhanced_docs = filtered_realtime[:num_to_inject]
+                                logger.info(f"[リアルタイム保証] enhanced_docsが空のためrealtime{num_to_inject}件を設定")
+                        else:
+                            logger.info("[Phase B3-3] relevance基準を満たすrealtime文書が0件のため、注入をスキップ(潔く0件で回答)")
                     else:
-                        # enhanced_docsが空の場合はrealtime1件を設定
-                        enhanced_docs = realtime_補完[:1]
-                        logger.info(f"[リアルタイム保証] enhanced_docsが空のためrealtime1件を設定")
-                else:
-                    logger.warning("[リアルタイム保証] realtime補完取得に失敗（0件）")
-            except Exception as e:
-                logger.error(f"[リアルタイム保証] 補完処理エラー: {e}")
+                        logger.warning("[リアルタイム保証] realtime補完取得に失敗(0件)")
+                except Exception as e:
+                    logger.error(f"[リアルタイム保証] 補完処理エラー: {e}")
+            else:
+                logger.info(f"[Phase B3-3] 注入条件NG: 年号={query_years}, アップデート文脈={query_has_update} → realtime注入をスキップ")
         else:
             logger.info(f"[リアルタイム保証] realtime文書が既に{realtime_count}件含まれているため、注入スキップ")
         
@@ -1787,7 +2185,16 @@ def _get_llm_response_hybrid(chat_message):
         
         # AIスコアリングによる品質フィルタリング
         scored_docs = _apply_ai_quality_scoring(enhanced_docs, chat_message)
-        logger.info(f"[ハイブリッドRAG] AIスコアリング完了: {len(scored_docs)}件が品質基準を通過")
+        realtime_in_scored = sum(1 for doc in scored_docs if doc.metadata.get('source_type') == 'realtime')
+        logger.info(f"[ハイブリッドRAG] AIスコアリング完了: {len(scored_docs)}件が品質基準を通過（うちrealtime: {realtime_in_scored}件）")
+        
+        # ★★★ Phase A1: AIスコアリング後の文書詳細ログ ★★★
+        logger.info(f"[AIスコアリング後] 通過文書詳細:")
+        for i, doc in enumerate(scored_docs):
+            source_type = doc.metadata.get('source_type', 'unknown')
+            title = doc.metadata.get('title', 'No title')
+            ai_score = doc.metadata.get('ai_scores', {}).get('total', 0)
+            logger.info(f"  [{i+1}] AI_score={ai_score:.1f}, type={source_type:8s}, title={title[:45]}")
         
         if not scored_docs:
             # フォールバック：従来システム
@@ -1800,40 +2207,123 @@ def _get_llm_response_hybrid(chat_message):
         # LLM実行
         llm = ChatOpenAI(model=ct.MODEL, temperature=ct.TEMPERATURE)
         
-        # プロンプトテンプレート（SEO特化・ハイブリッド対応）
-        system_prompt = f"""
-        あなたは社内SEO専門のアシスタントです。
-        以下の情報源を統合して、高品質で最新性のある回答を提供してください。
+        # ★★★ Phase B3-4: モード別プロンプト分岐 ★★★
+        if disable_realtime:
+            # ドメイン解析モード専用プロンプト
+            logger.info("[Phase B3-4] ドメイン解析モード: 専用プロンプトを適用")
+            system_prompt = f"""
+        あなたはSEO検定1級レベルのSEO専門アシスタントです。
+        ドメイン解析結果を基に、社内SEO検定資料の基準に準拠した改善提案を行ってください。
         
-        【情報源の種類】
-        - 社内資料：確実性の高い基本知識
-        - 最新情報：業界の最新動向
+        【出力形式】厳守
+        以下の構成で、実践的な改善提案をしてください：
         
-        【回答条件】
-        1. 社内資料を基本として、最新情報で補完してください
-        2. 情報源の違いを明示してください
-        3. 実践的で具体的な回答を提供してください
+        **総合評価**
+        - サイト全体のSEO状況を3-5行で要約
+        
+        **主な問題点（優先度順）**
+        - 問題点1（影響度：高/中/低）
+        - 問題点2（影響度：高/中/低）
+        - 問題点3（影響度：高/中/低）
+        
+        **具体的な改善提案**
+        1. タイトルタグの最適化
+           - 現状の問題点
+           - 具体的な改善方法
+           - 改善例
+        
+        2. メタディスクリプションの改善
+           - 現状の問題点
+           - 具体的な改善方法
+           - 改善例
+        
+        3. 見出し構造の最適化
+           - 現状の問題点
+           - 具体的な改善方法
+           - 改善例
+        
+        4. 画像のalt属性設定
+           - 現状の問題点
+           - 具体的な改善方法
+           - 改善例
+        
+        **優先順位別アクションリスト**
+        【高優先度】
+        - アクション1
+        - アクション2
+        
+        【中優先度】
+        - アクション3
+        - アクション4
+        
+        【低優先度】
+        - 現状維持または微調整
         
         【厳守事項】
+        - 具体的な数値基準は、社内SEO検定資料に明記されている場合のみ使用してください
+        - 資料に数値基準がない場合は、定性的表現（「増やす」「改善する」「充実させる」等）を使用してください
+        - 推測や一般論に基づく絶対的な数値基準（「業界標準は〇本」等）は禁止します
+        - サイト平均との相対比較（「サイト平均6.2本に対してこのページは3本」等）は許可されます
+        
+        【統合情報】
+        {enhanced_context}
+        """
+        else:
+            # SEO質問モード専用プロンプト（RSS無効化対応：2セクション構成）
+            logger.info("[プロンプト設定] RSS無効化対応：2セクション構成（社内資料+実践的具体策）を使用")
+            system_prompt = f"""
+        あなたは社内SEO専門のアシスタントです。
+        以下の情報源（SEO検定公式テキスト：2024年8月時点）に基づいて、高品質な回答を提供してください。
+        
+        【情報源】
+        - 社内資料：SEO検定公式テキスト(2025・2026年版：2024年8月時点の情報)のみ
+        
+        【回答フォーマット】厳守
+        回答は必ず以下の2つのセクションで構成してください。見出しテキストと太字マークアップを一字一句変更せずに使用してください：
+        
+        **社内資料に基づく基本知識**
+        - 社内SEO資料が1件以上ある場合 → その内容を詳しく記載
+        - 社内SEO資料が0件の場合 → 「該当する社内資料が見つかりませんでした。一般的なSEO知識としては〜」と明記して一般論を述べる
+        
+        **実践的な具体策**
+        - 上記の情報に基づく具体的な行動を提案
+        
+        【回答条件】
+        1. 上記2つのセクション見出しは絶対に変更しないでください（「社内資料からの基本知識」「具体的な実践方法」など別表現は禁止）
+        2. 見出しは必ず太字マークアップ（**見出し**）を使用してください
+        3. 総合情報評価スコアを参考に、回答の確実性レベルを調整してください
+        4. 情報源に存在しない内容を「〜に基づく」と断言しないでください
+        
+        【厳守事項】
+        - 総合情報評価スコアが1.0未満の場合は、情報不足であることを冒頭で明示してください
+        - 「社内資料: 0件」の場合は、該当セクションで「情報なし」と正直に記載してください
+        - 情報源に存在しない内容を、あたかも情報源に基づくかのように記載することは絶対に禁止
         - 具体的な数値基準（例：「10本以上」「3本は少ない」等）は、提供された情報源に明記されている場合のみ使用してください
         - 情報源に数値基準がない場合は、定性的表現（「増やす」「改善する」「充実させる」等）を使用してください
         - サイト平均との相対比較（「サイト平均6.2本に対してこのページは3本」等）は許可されます
         - 推測や一般論に基づく絶対的な数値基準（「業界標準は〇本」等）は禁止します
         
-        【文字数に関する回答ルール】重要
-        - 文字数について回答する場合、断定的な判断（「少ない」「不足」「十分」「達していない」等）は絶対に避けてください
-        - 解析するページがメインページかサブページかを判断・推測してはいけません
-        - 必ず以下のすべての選択肢を提示する形式で回答してください：
-          「現在の文字数は〇〇字です。ページの種類により推奨文字数が異なります：
+        【文字数に関する回答ルール】**最重要・必須対応**
+        - このモードでは実際のページ本文を解析していないため、「現在の文字数は〇〇字です」という表現は絶対に使用しないでください
+        - **文字数について質問された場合は、社内資料の検索結果に関わらず、以下の推奨文字数情報（SEO検定公式テキストSEO3-3より）を必ず回答してください**
+        - 「該当する社内資料が見つかりませんでした」という表現は使用せず、以下の情報を**社内資料に基づく基本知識**セクションに記載してください：
+          
+          「ページの種類により推奨文字数が異なります（SEO検定公式テキストSEO3-3準拠）：
+           
            【トップページ/メインページの場合】
              • 物販サイトなどのトップページ: 0～800字程度
              • 来店型ビジネス（クリニック、美容室、整体院等）: 700～2,500字程度
              • 単品サービスや単品通販のトップページ: 4,000字以上
+           
            【サブページの場合】
              • 単純な概念の解説: 1,500字程度
              • 複雑な事柄の説明: 4,000字以上
-           【YMYL分野の場合】上記それぞれの文字数の2倍が推奨されます
+           
+           【YMYL分野の場合】
+             上記それぞれの文字数の2倍が推奨されます
+           
            ページの種類とYMYL該当性を確認の上、適切な文字数を目指してください。」
+        
         - すべての選択肢を必ず提示し、特定のケースのみを提示してはいけません
         - ユーザーに判断を委ねる表現を使用してください
         
@@ -1893,20 +2383,52 @@ def _get_llm_response_hybrid(chat_message):
 
 def _build_hybrid_context(documents, query):
     """
-    ハイブリッド情報統合コンテキスト構築
+    ハイブリッド情報統合コンテキスト構築（RSS無効化対応）
+    【改善版】フォールバック文書を重み付けで扱う
     """
     if not documents:
-        return "関連する情報が見つかりませんでした。"
+        return """
+【重要通知】関連する情報が見つかりませんでした。
+- 社内SEO資料: 該当なし（0件）
+
+この状態では、社内資料に「基づく」回答はできません。
+一般的なSEO知識として回答する場合は、その旨を明記してください。
+"""
     
-    # ソースタイプ別にグループ化
-    source_groups = {"internal": [], "realtime": [], "other": []}
+    # ソースタイプ別にグループ化（フォールバックは別カウント）
+    source_groups = {"internal": [], "realtime": [], "fallback": [], "other": []}
     
     for doc in documents:
         source_type = doc.metadata.get('source_type', 'other')
-        source_groups[source_type].append(doc)
+        is_fallback = doc.metadata.get('is_fallback', False)
+        
+        if is_fallback:
+            source_groups["fallback"].append(doc)
+        else:
+            source_groups[source_type].append(doc)
     
     # 統合コンテキスト構築
     context_parts = []
+    
+    # 情報源サマリー（RSS無効化により社内資料のみ）
+    internal_count = len(source_groups["internal"])
+    realtime_count = len(source_groups["realtime"])  # 常に0
+    fallback_count = len(source_groups["fallback"])
+    
+    # 情報評価スコア計算（RSS無効化：internal*1.0 + fallback*0.3のみ）
+    info_score = internal_count * 1.0 + fallback_count * 0.3
+    
+    context_parts.append(f"""
+【情報源サマリー】（SEO検定公式テキスト：2024年8月時点）
+- 社内SEO資料: {internal_count}件（優先度: 高）
+- 基盤知識（フォールバック）: {fallback_count}件（優先度: 低）
+- 総合情報評価スコア: {info_score:.1f}点
+
+【回答生成方針】
+- スコア3.0以上: 十分な情報源あり → 詳細な回答が可能
+- スコア1.0-3.0: 限定的な情報源 → 慎重に回答
+- スコア1.0未満: 情報不足 → 一般論として回答（その旨を明記）
+""")
     
     # 社内資料セクション（実際のファイル名表示）
     if source_groups["internal"]:
@@ -1920,13 +2442,21 @@ def _build_hybrid_context(documents, query):
                 file_name = file_name.rsplit('.', 1)[0]
             context_parts.append(f"【{file_name}】\n{doc.page_content}")
     
-    # 最新情報セクション
+    # 最新情報セクション（RSS無効化により使用しない）
+    # RSS_ENABLED=Falseのため、source_groups["realtime"]は常に空リスト
     if source_groups["realtime"]:
         context_parts.append("## 最新SEO情報")
         for i, doc in enumerate(source_groups["realtime"][:3], 1):
             title = doc.metadata.get('title', f'最新情報{i}')
             published = doc.metadata.get('published_date', '')
             context_parts.append(f"【{title}】（{published}）\n{doc.page_content}")
+    
+    # フォールバック基盤知識セクション（優先度低・補助情報として）
+    if source_groups["fallback"]:
+        context_parts.append("## 基盤知識（参考情報・優先度低）")
+        context_parts.append("※以下は最低限の基盤知識です。社内資料や最新情報が優先されます。")
+        for i, doc in enumerate(source_groups["fallback"][:2], 1):
+            context_parts.append(f"【参考{i}】\n{doc.page_content[:300]}...")
     
     return "\n\n".join(context_parts)
 
